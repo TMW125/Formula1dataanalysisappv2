@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from "react-router";
 import { LayoutDashboard, Activity, GitCompare, TrendingUp, Database, ChevronRight, Search } from "lucide-react";
-import { sessions, raceWeekends } from "../data/mockData";
+import { sessions, raceWeekends, seasons } from "../data/mockData";
 
 export function MainLayout() {
   const navItems = [
@@ -80,6 +80,13 @@ export function MainLayout() {
           <select className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary">
             {raceWeekends.map((weekend) => (
               <option key={weekend}>{weekend}</option>
+            ))}
+          </select>
+
+          {/* Season Selector */}
+          <select className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary">
+            {seasons.map((season) => (
+              <option key={season}>{season}</option>
             ))}
           </select>
 

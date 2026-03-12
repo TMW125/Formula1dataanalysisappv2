@@ -130,6 +130,16 @@ export const raceWeekends = [
   "Chinese Grand Prix",
 ];
 
+export const seasons = [
+  "2026",
+  "2025",
+  "2024",
+  "2023",
+  "2022",
+  "2021",
+  "2020",
+];
+
 // Track map coordinates (simplified)
 export const trackMapPoints = [
   { x: 100, y: 200 },
