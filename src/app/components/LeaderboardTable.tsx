@@ -1,7 +1,7 @@
-import { LapTime } from "../data/mockData";
+import type { LeaderboardRow } from "../types/ui";
 
 interface LeaderboardTableProps {
-  data: LapTime[];
+  data: LeaderboardRow[];
 }
 
 export function LeaderboardTable({ data }: LeaderboardTableProps) {

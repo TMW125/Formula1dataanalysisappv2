@@ -1,17 +1,98 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { TelemetryChart } from "../components/charts/TelemetryChart";
-import { mockDrivers, mockTelemetryData, mockSectorTimes } from "../data/mockData";
-import { Clock } from "lucide-react";
+import { LoadingSpinner } from "../components/LoadingSpinner";
+import {
+  useCarDataForDriver,
+  useCurrentSession,
+  useDriversData,
+  useLapsData,
+  useStintsData,
+} from "../hooks/useSessionData";
+import { useSelectedSessionKey } from "../context/F1DataContext";
+import { buildCarTelemetry, capitalize, formatLapTime, toHexColor } from "../utils/transformers";
+import { TIRE_COLORS } from "../types/ui";
+import type { TireCompound } from "../types/ui";
+import { Clock, TrendingUp } from "lucide-react";
+
+function NoSessionBanner() {
+  return (
+    <div className="flex flex-col items-center justify-center h-64 text-center space-y-3 bg-card border border-border rounded-lg p-8">
+      <TrendingUp className="w-10 h-10 text-muted-foreground opacity-50" />
+      <p className="text-lg text-muted-foreground">No session selected</p>
+      <p className="text-sm text-muted-foreground">
+        Use the selectors above to choose a season, race weekend, and session.
+      </p>
+    </div>
+  );
+}
 
 export function DriverAnalysis() {
-  const [selectedDriver, setSelectedDriver] = useState(mockDrivers[0]);
-  const [selectedLap, setSelectedLap] = useState(1);
+  const sessionKey = useSelectedSessionKey();
 
-  const tireCompounds = [
-    { compound: "Soft", color: "#E10600", laps: "1-12" },
-    { compound: "Medium", color: "#FFD700", laps: "13-37" },
-    { compound: "Hard", color: "#f5f5f5", laps: "38-57" },
-  ];
+  const { data: drivers, loading: driversLoading } = useDriversData();
+  const { data: laps, loading: lapsLoading } = useLapsData();
+  const { data: stints } = useStintsData();
+
+  // Selected driver state — default to first driver once loaded
+  const [selectedDriverNumber, setSelectedDriverNumber] = useState<number | null>(null);
+
+  // Resolve driver once list arrives
+  const effectiveDriverNum =
+    selectedDriverNumber ?? (drivers.length > 0 ? drivers[0].driver_number : null);
+
+  const selectedDriver = drivers.find((d) => d.driver_number === effectiveDriverNum) ?? null;
+
+  // Car data for the selected driver
+  const { data: carData, loading: carDataLoading } = useCarDataForDriver(effectiveDriverNum);
+
+  // Laps for the selected driver
+  const driverLaps = useMemo(
+    () =>
+      laps
+        .filter((l) => l.driver_number === effectiveDriverNum && l.lap_duration !== null)
+        .sort((a, b) => a.lap_number - b.lap_number),
+    [laps, effectiveDriverNum]
+  );
+
+  const [selectedLap, setSelectedLap] = useState<number>(1);
+  const lapData = driverLaps.find((l) => l.lap_number === selectedLap) ?? driverLaps[0] ?? null;
+
+  // Sector times from lap data
+  const sectorTimes = lapData
+    ? [
+        { sector: 1, time: lapData.duration_sector_1?.toFixed(3) ?? "—", diff: "—" },
+        { sector: 2, time: lapData.duration_sector_2?.toFixed(3) ?? "—", diff: "—" },
+        { sector: 3, time: lapData.duration_sector_3?.toFixed(3) ?? "—", diff: "—" },
+      ]
+    : [];
+
+  // Best lap for driver
+  const bestLap = useMemo(() => {
+    const valid = driverLaps.filter((l) => l.lap_duration! > 0).map((l) => l.lap_duration!);
+    return valid.length > 0 ? formatLapTime(Math.min(...valid)) : "—";
+  }, [driverLaps]);
+
+  // Telemetry built from car data
+  const telemetry = useMemo(() => buildCarTelemetry(carData), [carData]);
+
+  // Sample down for performance (show max 500 points in chart)
+  const telemetrySampled = useMemo(() => {
+    if (telemetry.length <= 500) return telemetry;
+    const step = Math.ceil(telemetry.length / 500);
+    return telemetry.filter((_, i) => i % step === 0);
+  }, [telemetry]);
+
+  // Tire stints for this driver
+  const driverStints = useMemo(
+    () =>
+      stints
+        .filter((s) => s.driver_number === effectiveDriverNum)
+        .sort((a, b) => a.lap_start - b.lap_start),
+    [stints, effectiveDriverNum]
+  );
+
+  const isLoading = driversLoading || lapsLoading;
+  const teamColor = selectedDriver ? toHexColor(selectedDriver.team_colour) : "#888";
 
   return (
     <div className="p-6 space-y-6">
@@ -21,158 +102,203 @@ export function DriverAnalysis() {
         <p className="text-muted-foreground">Detailed telemetry and performance analysis</p>
       </div>
 
-      {/* Driver and Lap Selector */}
-      <div className="flex gap-4 items-center">
-        <div>
-          <label className="block text-sm text-muted-foreground mb-2">Driver</label>
-          <select
-            value={selectedDriver.number}
-            onChange={(e) => {
-              const driver = mockDrivers.find((d) => d.number === Number(e.target.value));
-              if (driver) setSelectedDriver(driver);
-            }}
-            className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary min-w-[200px]"
-          >
-            {mockDrivers.map((driver) => (
-              <option key={driver.number} value={driver.number}>
-                {driver.name} - {driver.team}
-              </option>
-            ))}
-          </select>
+      {!sessionKey ? (
+        <NoSessionBanner />
+      ) : isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <LoadingSpinner />
         </div>
-
-        <div>
-          <label className="block text-sm text-muted-foreground mb-2">Lap Number</label>
-          <select
-            value={selectedLap}
-            onChange={(e) => setSelectedLap(Number(e.target.value))}
-            className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary min-w-[120px]"
-          >
-            {Array.from({ length: 20 }, (_, i) => i + 1).map((lap) => (
-              <option key={lap} value={lap}>
-                Lap {lap}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Driver Info Card */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <div className="flex items-center gap-6">
-          <div
-            className="w-24 h-24 rounded-lg flex items-center justify-center text-4xl font-bold"
-            style={{ backgroundColor: selectedDriver.teamColor + "20", color: selectedDriver.teamColor }}
-          >
-            {selectedDriver.abbreviation}
-          </div>
-          <div className="flex-1">
-            <h2 className="text-2xl text-card-foreground mb-1">{selectedDriver.name}</h2>
-            <p className="text-muted-foreground mb-2">{selectedDriver.team}</p>
-            <div className="flex gap-4 mt-3">
-              <div>
-                <p className="text-xs text-muted-foreground">Car Number</p>
-                <p className="text-lg font-bold text-card-foreground">#{selectedDriver.number}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Best Lap</p>
-                <p className="text-lg font-bold text-card-foreground font-mono">1:31.720</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Sector Times */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="mb-4 text-card-foreground flex items-center gap-2">
-          <Clock className="w-5 h-5" />
-          Sector Times Breakdown
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {mockSectorTimes.map((sector) => (
-            <div key={sector.sector} className="bg-secondary rounded-lg p-4">
-              <p className="text-xs text-muted-foreground mb-1">Sector {sector.sector}</p>
-              <p className="text-2xl font-mono text-card-foreground mb-1">{sector.time}</p>
-              <p
-                className={`text-sm font-mono ${
-                  sector.diff.startsWith("-") ? "text-green-500" : "text-red-500"
-                }`}
+      ) : (
+        <>
+          {/* Driver and Lap Selector */}
+          <div className="flex gap-4 items-center">
+            <div>
+              <label className="block text-sm text-muted-foreground mb-2">Driver</label>
+              <select
+                value={effectiveDriverNum ?? ""}
+                onChange={(e) => {
+                  setSelectedDriverNumber(Number(e.target.value));
+                  setSelectedLap(1);
+                }}
+                className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary min-w-[200px]"
               >
-                {sector.diff}
-              </p>
+                {drivers.map((d) => (
+                  <option key={d.driver_number} value={d.driver_number}>
+                    {d.full_name} — {d.team_name}
+                  </option>
+                ))}
+              </select>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Telemetry Charts */}
-      <div className="space-y-6">
-        <TelemetryChart
-          data={mockTelemetryData}
-          dataKeys={[{ key: "speed", color: "#E10600", name: "Speed (km/h)" }]}
-          xKey="distance"
-          title="Speed vs Distance"
-          yAxisLabel="Speed (km/h)"
-          height={220}
-        />
+            <div>
+              <label className="block text-sm text-muted-foreground mb-2">Lap Number</label>
+              <select
+                value={selectedLap}
+                onChange={(e) => setSelectedLap(Number(e.target.value))}
+                className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary min-w-[120px]"
+                disabled={driverLaps.length === 0}
+              >
+                {driverLaps.length > 0 ? (
+                  driverLaps.map((lap) => (
+                    <option key={lap.lap_number} value={lap.lap_number}>
+                      Lap {lap.lap_number}
+                    </option>
+                  ))
+                ) : (
+                  <option>No laps</option>
+                )}
+              </select>
+            </div>
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TelemetryChart
-            data={mockTelemetryData}
-            dataKeys={[{ key: "throttle", color: "#00D2BE", name: "Throttle %" }]}
-            xKey="distance"
-            title="Throttle Application"
-            yAxisLabel="Throttle %"
-            height={200}
-          />
-
-          <TelemetryChart
-            data={mockTelemetryData}
-            dataKeys={[{ key: "brake", color: "#ff0050", name: "Brake %" }]}
-            xKey="distance"
-            title="Brake Application"
-            yAxisLabel="Brake %"
-            height={200}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TelemetryChart
-            data={mockTelemetryData}
-            dataKeys={[{ key: "gear", color: "#0090ff", name: "Gear" }]}
-            xKey="distance"
-            title="Gear Selection"
-            yAxisLabel="Gear"
-            height={200}
-          />
-
-          <TelemetryChart
-            data={mockTelemetryData}
-            dataKeys={[{ key: "rpm", color: "#ff8800", name: "RPM" }]}
-            xKey="distance"
-            title="Engine RPM"
-            yAxisLabel="RPM"
-            height={200}
-          />
-        </div>
-      </div>
-
-      {/* Tire Compound History */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="mb-4 text-card-foreground">Tire Compound & Stint History</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {tireCompounds.map((tire) => (
-            <div key={tire.compound} className="bg-secondary rounded-lg p-4">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: tire.color }}></div>
-                <p className="text-card-foreground font-semibold">{tire.compound}</p>
+          {/* Driver Info Card */}
+          {selectedDriver && (
+            <div className="bg-card border border-border rounded-lg p-6">
+              <div className="flex items-center gap-6">
+                <div
+                  className="w-24 h-24 rounded-lg flex items-center justify-center text-4xl font-bold"
+                  style={{ backgroundColor: teamColor + "20", color: teamColor }}
+                >
+                  {selectedDriver.name_acronym}
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-2xl text-card-foreground mb-1">{selectedDriver.full_name}</h2>
+                  <p className="text-muted-foreground mb-2">{selectedDriver.team_name}</p>
+                  <div className="flex gap-4 mt-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Car Number</p>
+                      <p className="text-lg font-bold text-card-foreground">#{selectedDriver.driver_number}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Best Lap</p>
+                      <p className="text-lg font-bold text-card-foreground font-mono">{bestLap}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Country</p>
+                      <p className="text-lg font-bold text-card-foreground">{selectedDriver.country_code}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground">Laps: {tire.laps}</p>
             </div>
-          ))}
-        </div>
-      </div>
+          )}
+
+          {/* Sector Times */}
+          {sectorTimes.length > 0 && (
+            <div className="bg-card border border-border rounded-lg p-6">
+              <h3 className="mb-4 text-card-foreground flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Sector Times — Lap {lapData?.lap_number}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {sectorTimes.map((sector) => (
+                  <div key={sector.sector} className="bg-secondary rounded-lg p-4">
+                    <p className="text-xs text-muted-foreground mb-1">Sector {sector.sector}</p>
+                    <p className="text-2xl font-mono text-card-foreground mb-1">{sector.time}</p>
+                    <p className="text-sm font-mono text-muted-foreground">{sector.diff}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Telemetry Charts */}
+          {carDataLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <LoadingSpinner />
+            </div>
+          ) : telemetrySampled.length > 0 ? (
+            <div className="space-y-6">
+              <TelemetryChart
+                data={telemetrySampled}
+                dataKeys={[{ key: "speed", color: teamColor, name: "Speed (km/h)" }]}
+                xKey="distance"
+                title="Speed vs Sample"
+                yAxisLabel="Speed (km/h)"
+                xLabel="Sample"
+                height={220}
+              />
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <TelemetryChart
+                  data={telemetrySampled}
+                  dataKeys={[{ key: "throttle", color: "#00D2BE", name: "Throttle %" }]}
+                  xKey="distance"
+                  title="Throttle Application"
+                  yAxisLabel="Throttle %"
+                  xLabel="Sample"
+                  height={200}
+                />
+                <TelemetryChart
+                  data={telemetrySampled}
+                  dataKeys={[{ key: "brake", color: "#ff0050", name: "Brake %" }]}
+                  xKey="distance"
+                  title="Brake Application"
+                  yAxisLabel="Brake %"
+                  xLabel="Sample"
+                  height={200}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <TelemetryChart
+                  data={telemetrySampled}
+                  dataKeys={[{ key: "gear", color: "#0090ff", name: "Gear" }]}
+                  xKey="distance"
+                  title="Gear Selection"
+                  yAxisLabel="Gear"
+                  xLabel="Sample"
+                  height={200}
+                />
+                <TelemetryChart
+                  data={telemetrySampled}
+                  dataKeys={[{ key: "rpm", color: "#ff8800", name: "RPM" }]}
+                  xKey="distance"
+                  title="Engine RPM"
+                  yAxisLabel="RPM"
+                  xLabel="Sample"
+                  height={200}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-lg p-6 text-center text-muted-foreground text-sm">
+              No telemetry data available for this driver in the current session.
+            </div>
+          )}
+
+          {/* Tire Compound History */}
+          {driverStints.length > 0 && (
+            <div className="bg-card border border-border rounded-lg p-6">
+              <h3 className="mb-4 text-card-foreground">Tire Compound &amp; Stint History</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {driverStints.map((stint, idx) => {
+                  const compound = stint.compound as TireCompound;
+                  return (
+                    <div key={idx} className="bg-secondary rounded-lg p-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: TIRE_COLORS[compound] }}
+                        />
+                        <p className="text-card-foreground font-semibold">
+                          {capitalize(compound)}
+                        </p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Laps: {stint.lap_start}–{stint.lap_end ?? "?"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Age at start: {stint.tyre_age_at_start} laps
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

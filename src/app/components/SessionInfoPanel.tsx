@@ -1,8 +1,8 @@
 import { Cloud, MapPin, Activity, Clock } from "lucide-react";
-import { SessionInfo } from "../data/mockData";
+import type { SessionInfoData } from "../types/ui";
 
 interface SessionInfoPanelProps {
-  info: SessionInfo;
+  info: SessionInfoData;
 }
 
 export function SessionInfoPanel({ info }: SessionInfoPanelProps) {

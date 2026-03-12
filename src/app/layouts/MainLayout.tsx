@@ -1,8 +1,15 @@
 import { Outlet, NavLink } from "react-router";
 import { LayoutDashboard, Activity, GitCompare, TrendingUp, Database, ChevronRight, Search } from "lucide-react";
-import { sessions, raceWeekends, seasons } from "../data/mockData";
+import { useF1Data, useMeetings, useSessions } from "../context/F1DataContext";
+
+/** Seasons available in the selector — extend as new seasons are released. */
+const AVAILABLE_SEASONS = ["2026", "2025", "2024", "2023", "2022", "2021", "2020"];
 
 export function MainLayout() {
+  const { state, setSeason, setMeetingKey, setSessionKey } = useF1Data();
+  const { meetings, loading: meetingsLoading } = useMeetings();
+  const { sessions, loading: sessionsLoading } = useSessions();
+
   const navItems = [
     { to: "/", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/driver-analysis", icon: Activity, label: "Driver Analysis" },
@@ -69,24 +76,59 @@ export function MainLayout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar */}
         <header className="bg-card border-b border-border px-6 py-4 flex items-center gap-4">
-          {/* Session Selector */}
-          <select className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary">
-            {sessions.map((session) => (
-              <option key={session}>{session}</option>
-            ))}
-          </select>
-
-          {/* Race Weekend Selector */}
-          <select className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary">
-            {raceWeekends.map((weekend) => (
-              <option key={weekend}>{weekend}</option>
-            ))}
-          </select>
-
           {/* Season Selector */}
-          <select className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary">
-            {seasons.map((season) => (
-              <option key={season}>{season}</option>
+          <select
+            value={state.selectedSeason}
+            onChange={(e) => setSeason(e.target.value)}
+            className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+            aria-label="Select season"
+          >
+            {AVAILABLE_SEASONS.map((season) => (
+              <option key={season} value={season}>
+                {season}
+              </option>
+            ))}
+          </select>
+
+          {/* Race Weekend (Meeting) Selector */}
+          <select
+            value={state.selectedMeetingKey ?? ""}
+            onChange={(e) => {
+              const val = e.target.value;
+              setMeetingKey(val === "" ? null : Number(val));
+            }}
+            disabled={meetingsLoading || meetings.length === 0}
+            className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Select race weekend"
+          >
+            <option value="">
+              {meetingsLoading ? "Loading…" : "Select race weekend"}
+            </option>
+            {meetings.map((meeting) => (
+              <option key={meeting.meeting_key} value={meeting.meeting_key}>
+                {meeting.meeting_name}
+              </option>
+            ))}
+          </select>
+
+          {/* Session Selector */}
+          <select
+            value={state.selectedSessionKey ?? ""}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSessionKey(val === "" ? null : Number(val));
+            }}
+            disabled={sessionsLoading || sessions.length === 0 || state.selectedMeetingKey === null}
+            className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Select session"
+          >
+            <option value="">
+              {sessionsLoading ? "Loading…" : "Select session"}
+            </option>
+            {sessions.map((session) => (
+              <option key={session.session_key} value={session.session_key}>
+                {session.session_name}
+              </option>
             ))}
           </select>
 

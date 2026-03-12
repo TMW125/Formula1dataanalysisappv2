@@ -1,31 +1,87 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ScatterChart, Scatter, Cell } from "recharts";
-import { mockLapTimeData, mockTireStints } from "../data/mockData";
+import { useMemo } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ScatterChart,
+  Scatter,
+  Cell,
+} from "recharts";
 import { Flag, Clock, TrendingDown } from "lucide-react";
+import { useDriversData, useLapsData, usePitsData, useStintsData } from "../hooks/useSessionData";
+import { useSelectedSessionKey } from "../context/F1DataContext";
+import {
+  buildPaceData,
+  buildPitStops,
+  buildStintTimeline,
+  getBestLapFormatted,
+} from "../utils/transformers";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 
 export function RaceStrategy() {
-  const tireColors: { [key: string]: string } = {
-    Soft: "#E10600",
-    Medium: "#FFD700",
-    Hard: "#f5f5f5",
-  };
+  const sessionKey = useSelectedSessionKey();
+  const { data: drivers, loading: driversLoading } = useDriversData();
+  const { data: laps, loading: lapsLoading } = useLapsData();
+  const { data: stints, loading: stintsLoading } = useStintsData();
+  const { data: pits, loading: pitsLoading } = usePitsData();
 
-  // Pit stop data
-  const pitStops = [
-    { driver: "Verstappen", lap: 12, duration: "2.3s", compound: "Medium" },
-    { driver: "Verstappen", lap: 37, duration: "2.5s", compound: "Hard" },
-    { driver: "Leclerc", lap: 10, duration: "2.6s", compound: "Medium" },
-    { driver: "Leclerc", lap: 38, duration: "2.4s", compound: "Hard" },
-  ];
+  const loading = driversLoading || lapsLoading || stintsLoading || pitsLoading;
 
-  // Average pace by stint
-  const paceData = [
-    { driver: "Verstappen", stint: "Soft (1-12)", avgPace: 93.2, color: "#3671C6" },
-    { driver: "Verstappen", stint: "Medium (13-37)", avgPace: 94.1, color: "#3671C6" },
-    { driver: "Verstappen", stint: "Hard (38-57)", avgPace: 95.3, color: "#3671C6" },
-    { driver: "Leclerc", stint: "Soft (1-10)", avgPace: 93.5, color: "#E8002D" },
-    { driver: "Leclerc", stint: "Medium (11-38)", avgPace: 94.3, color: "#E8002D" },
-    { driver: "Leclerc", stint: "Hard (39-57)", avgPace: 95.5, color: "#E8002D" },
-  ];
+  const stintTimeline = useMemo(() => buildStintTimeline(stints, drivers), [stints, drivers]);
+  const pitStops = useMemo(() => buildPitStops(pits, drivers, stints), [pits, drivers, stints]);
+  const paceData = useMemo(() => buildPaceData(laps, stints, drivers), [laps, stints, drivers]);
+
+  // Per-driver lap scatter data: top 5 drivers by number of laps
+  const lapScatterSeries = useMemo(() => {
+    const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
+    const grouped = new Map<number, { lap: number; time: number }[]>();
+    for (const lap of laps) {
+      if (lap.lap_duration === null || lap.is_pit_out_lap) continue;
+      const list = grouped.get(lap.driver_number) ?? [];
+      list.push({ lap: lap.lap_number, time: lap.lap_duration });
+      grouped.set(lap.driver_number, list);
+    }
+    return [...grouped.entries()]
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 5)
+      .map(([num, data]) => {
+        const d = driverMap.get(num);
+        return {
+          name: d?.name_acronym ?? `#${num}`,
+          color: d?.team_colour ? `#${d.team_colour}` : "#888888",
+          data,
+        };
+      });
+  }, [laps, drivers]);
+
+  // Stats
+  const totalLaps = laps.length > 0 ? Math.max(...laps.map((l) => l.lap_number)) : 0;
+  const avgPitDuration =
+    pits.length > 0
+      ? (
+          pits
+            .filter((p) => p.pit_duration != null)
+            .reduce((sum, p) => sum + (p.pit_duration ?? 0), 0) /
+          pits.filter((p) => p.pit_duration != null).length
+        ).toFixed(2) + "s"
+      : "—";
+  const fastestLap = getBestLapFormatted(laps);
+
+  if (!sessionKey) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <Flag className="w-12 h-12 text-muted-foreground mb-4" />
+        <h2 className="text-xl text-foreground mb-2">No Session Selected</h2>
+        <p className="text-muted-foreground">Select a season, event, and session from the sidebar to view race strategy.</p>
+      </div>
+    );
+  }
+
+  if (loading) return <LoadingSpinner />;
 
   return (
     <div className="p-6 space-y-6">
@@ -44,7 +100,7 @@ export function RaceStrategy() {
             </div>
             <h3 className="text-card-foreground">Total Laps</h3>
           </div>
-          <p className="text-3xl font-bold text-card-foreground">57</p>
+          <p className="text-3xl font-bold text-card-foreground">{totalLaps || "—"}</p>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-6">
@@ -54,7 +110,7 @@ export function RaceStrategy() {
             </div>
             <h3 className="text-card-foreground">Avg Pit Stop</h3>
           </div>
-          <p className="text-3xl font-bold text-card-foreground font-mono">2.45s</p>
+          <p className="text-3xl font-bold text-card-foreground font-mono">{avgPitDuration}</p>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-6">
@@ -64,150 +120,132 @@ export function RaceStrategy() {
             </div>
             <h3 className="text-card-foreground">Fastest Lap</h3>
           </div>
-          <p className="text-3xl font-bold text-card-foreground font-mono">1:31.720</p>
+          <p className="text-3xl font-bold text-card-foreground font-mono">{fastestLap}</p>
         </div>
       </div>
 
       {/* Stint Timeline Visualization */}
       <div className="bg-card border border-border rounded-lg p-6">
         <h3 className="mb-6 text-card-foreground">Stint Timeline Visualization</h3>
-        <div className="space-y-4">
-          {/* Verstappen */}
-          <div>
-            <p className="text-sm text-muted-foreground mb-2">Max Verstappen</p>
-            <div className="flex gap-1 h-12">
-              <div
-                className="rounded flex items-center justify-center text-xs font-semibold text-white"
-                style={{ width: "21%", backgroundColor: tireColors.Soft }}
-              >
-                Soft
+        {stintTimeline.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No stint data available for this session.</p>
+        ) : (
+          <div className="space-y-4">
+            {stintTimeline.map((row) => (
+              <div key={row.driverNumber}>
+                <p className="text-sm text-muted-foreground mb-2" style={{ color: row.color }}>
+                  {row.driverName}
+                </p>
+                <div className="flex gap-1 h-12">
+                  {row.stints.map((s, i) => (
+                    <div
+                      key={i}
+                      className="rounded flex items-center justify-center text-xs font-semibold overflow-hidden"
+                      style={{
+                        width: `${s.widthPct}%`,
+                        backgroundColor: s.compoundColor,
+                        color: s.textColor,
+                        minWidth: "2rem",
+                      }}
+                      title={`${s.compound} — Laps ${s.lapStart}–${s.lapEnd}`}
+                    >
+                      {s.compound.charAt(0)}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>Lap 1</span>
+                  {row.stints.map((s, i) => (
+                    <span key={i}>Lap {s.lapEnd}</span>
+                  ))}
+                </div>
               </div>
-              <div
-                className="rounded flex items-center justify-center text-xs font-semibold text-gray-900"
-                style={{ width: "44%", backgroundColor: tireColors.Medium }}
-              >
-                Medium
-              </div>
-              <div
-                className="rounded flex items-center justify-center text-xs font-semibold text-gray-900"
-                style={{ width: "35%", backgroundColor: tireColors.Hard }}
-              >
-                Hard
-              </div>
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-              <span>Lap 1</span>
-              <span>Lap 12</span>
-              <span>Lap 37</span>
-              <span>Lap 57</span>
-            </div>
+            ))}
           </div>
-
-          {/* Leclerc */}
-          <div>
-            <p className="text-sm text-muted-foreground mb-2">Charles Leclerc</p>
-            <div className="flex gap-1 h-12">
-              <div
-                className="rounded flex items-center justify-center text-xs font-semibold text-white"
-                style={{ width: "17.5%", backgroundColor: tireColors.Soft }}
-              >
-                Soft
-              </div>
-              <div
-                className="rounded flex items-center justify-center text-xs font-semibold text-gray-900"
-                style={{ width: "49.1%", backgroundColor: tireColors.Medium }}
-              >
-                Medium
-              </div>
-              <div
-                className="rounded flex items-center justify-center text-xs font-semibold text-gray-900"
-                style={{ width: "33.4%", backgroundColor: tireColors.Hard }}
-              >
-                Hard
-              </div>
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-              <span>Lap 1</span>
-              <span>Lap 10</span>
-              <span>Lap 38</span>
-              <span>Lap 57</span>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Lap Times per Stint */}
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="mb-4 text-card-foreground">Lap Times Throughout Race</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <ScatterChart>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
-            <XAxis
-              dataKey="lap"
-              type="number"
-              stroke="#9ca3af"
-              tick={{ fill: "#9ca3af", fontSize: 12 }}
-              label={{ value: "Lap", position: "insideBottom", offset: -5, fill: "#9ca3af" }}
-            />
-            <YAxis
-              dataKey="verstappen"
-              stroke="#9ca3af"
-              tick={{ fill: "#9ca3af", fontSize: 12 }}
-              label={{ value: "Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
-              domain={[91, 99]}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#15151c",
-                border: "1px solid #2a2a36",
-                borderRadius: "0.375rem",
-                color: "#f5f5f5",
-              }}
-              labelStyle={{ color: "#9ca3af" }}
-            />
-            <Legend
-              wrapperStyle={{ paddingTop: "10px" }}
-              formatter={(value) => <span style={{ color: "#f5f5f5" }}>{value}</span>}
-            />
-            <Scatter key="verstappen" name="Verstappen" data={mockLapTimeData} fill="#3671C6" />
-            <Scatter key="leclerc" name="Leclerc" data={mockLapTimeData.map(d => ({ ...d, lap: d.lap, verstappen: d.leclerc }))} fill="#E8002D" />
-          </ScatterChart>
-        </ResponsiveContainer>
+        {lapScatterSeries.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No lap data available.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <ScatterChart>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
+              <XAxis
+                dataKey="lap"
+                type="number"
+                stroke="#9ca3af"
+                tick={{ fill: "#9ca3af", fontSize: 12 }}
+                label={{ value: "Lap", position: "insideBottom", offset: -5, fill: "#9ca3af" }}
+              />
+              <YAxis
+                dataKey="time"
+                stroke="#9ca3af"
+                tick={{ fill: "#9ca3af", fontSize: 12 }}
+                label={{ value: "Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#15151c",
+                  border: "1px solid #2a2a36",
+                  borderRadius: "0.375rem",
+                  color: "#f5f5f5",
+                }}
+                labelStyle={{ color: "#9ca3af" }}
+                formatter={(value: number) => [value.toFixed(3) + "s", "Lap time"]}
+              />
+              {lapScatterSeries.map((series) => (
+                <Scatter key={series.name} name={series.name} data={series.data} fill={series.color} />
+              ))}
+            </ScatterChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* Average Pace Comparison */}
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="mb-4 text-card-foreground">Average Pace by Stint</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={paceData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
-            <XAxis
-              dataKey="stint"
-              stroke="#9ca3af"
-              tick={{ fill: "#9ca3af", fontSize: 12 }}
-            />
-            <YAxis
-              stroke="#9ca3af"
-              tick={{ fill: "#9ca3af", fontSize: 12 }}
-              label={{ value: "Avg Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
-              domain={[92, 96]}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#15151c",
-                border: "1px solid #2a2a36",
-                borderRadius: "0.375rem",
-                color: "#f5f5f5",
-              }}
-              labelStyle={{ color: "#9ca3af" }}
-            />
-            <Bar dataKey="avgPace" radius={[4, 4, 0, 0]}>
-              {paceData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        {paceData.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No pace data available.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={paceData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
+              <XAxis
+                dataKey="stint"
+                stroke="#9ca3af"
+                tick={{ fill: "#9ca3af", fontSize: 10 }}
+                interval={0}
+                angle={-25}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis
+                stroke="#9ca3af"
+                tick={{ fill: "#9ca3af", fontSize: 12 }}
+                label={{ value: "Avg Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#15151c",
+                  border: "1px solid #2a2a36",
+                  borderRadius: "0.375rem",
+                  color: "#f5f5f5",
+                }}
+                labelStyle={{ color: "#9ca3af" }}
+                formatter={(value: number) => [value.toFixed(3) + "s", "Avg pace"]}
+              />
+              <Bar dataKey="avgPace" radius={[4, 4, 0, 0]}>
+                {paceData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* Pit Stop Summary */}
@@ -215,36 +253,40 @@ export function RaceStrategy() {
         <div className="p-4 border-b border-border">
           <h3 className="text-card-foreground">Pit Stop Summary</h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-secondary border-b border-border">
-                <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Driver</th>
-                <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Lap</th>
-                <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Duration</th>
-                <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Compound</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {pitStops.map((stop, idx) => (
-                <tr key={idx} className="hover:bg-secondary/50 transition-colors">
-                  <td className="px-4 py-3 text-card-foreground">{stop.driver}</td>
-                  <td className="px-4 py-3 text-muted-foreground">Lap {stop.lap}</td>
-                  <td className="px-4 py-3 text-card-foreground font-mono">{stop.duration}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: tireColors[stop.compound] }}
-                      ></div>
-                      <span className="text-muted-foreground">{stop.compound}</span>
-                    </div>
-                  </td>
+        {pitStops.length === 0 ? (
+          <p className="text-muted-foreground text-sm p-4">No pit stop data available.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-secondary border-b border-border">
+                  <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Driver</th>
+                  <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Lap</th>
+                  <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Duration</th>
+                  <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Compound</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {pitStops.map((stop, idx) => (
+                  <tr key={idx} className="hover:bg-secondary/50 transition-colors">
+                    <td className="px-4 py-3 text-card-foreground">{stop.driver}</td>
+                    <td className="px-4 py-3 text-muted-foreground">Lap {stop.lap}</td>
+                    <td className="px-4 py-3 text-card-foreground font-mono">{stop.duration}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: stop.compoundColor }}
+                        />
+                        <span className="text-muted-foreground">{stop.compound}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

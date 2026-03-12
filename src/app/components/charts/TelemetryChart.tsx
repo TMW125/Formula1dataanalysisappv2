@@ -6,10 +6,12 @@ interface TelemetryChartProps {
   xKey: string;
   title: string;
   yAxisLabel?: string;
+  /** Override the x-axis label. Defaults to "Distance (m)". */
+  xLabel?: string;
   height?: number;
 }
 
-export function TelemetryChart({ data, dataKeys, xKey, title, yAxisLabel, height = 200 }: TelemetryChartProps) {
+export function TelemetryChart({ data, dataKeys, xKey, title, yAxisLabel, xLabel = "Distance (m)", height = 200 }: TelemetryChartProps) {
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <h3 className="mb-4 text-card-foreground">{title}</h3>
@@ -20,7 +22,7 @@ export function TelemetryChart({ data, dataKeys, xKey, title, yAxisLabel, height
             dataKey={xKey}
             stroke="#9ca3af"
             tick={{ fill: "#9ca3af", fontSize: 12 }}
-            label={{ value: "Distance (m)", position: "insideBottom", offset: -5, fill: "#9ca3af" }}
+            label={{ value: xLabel, position: "insideBottom", offset: -5, fill: "#9ca3af" }}
           />
           <YAxis
             stroke="#9ca3af"
