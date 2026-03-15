@@ -6,7 +6,7 @@
  * inside UI components.
  */
 
-import type { CarData, Lap, OpenF1Driver, Pit, Session, Stint, Weather } from "../types/openf1";
+import type { CarData, Lap, OpenF1Driver, Pit, Session, SessionResult, Stint, Weather } from "../types/openf1";
 import type { LeaderboardRow, SessionInfoData, TireCompound } from "../types/ui";
 import { TIRE_COLORS } from "../types/ui";
 
@@ -73,6 +73,39 @@ export function buildLeaderboard(
       driver: d?.full_name ?? `#${driverNum}`,
       time: formatLapTime(bestTime),
       gap: idx === 0 ? "-" : `+${(bestTime - leaderTime).toFixed(3)}`,
+      team: d?.team_name ?? "Unknown",
+      teamColor: toHexColor(d?.team_colour),
+    };
+  });
+}
+
+/**
+ * Build a leaderboard from session_result endpoint data.
+ */
+export function buildLeaderboardFromResults(
+  results: SessionResult[],
+  drivers: OpenF1Driver[]
+): LeaderboardRow[] {
+  if (results.length === 0) return [];
+  const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
+
+  return results.map((r) => {
+    const d = driverMap.get(r.driver_number);
+    const rawGap = r.gap_to_leader;
+    let gap: string;
+    if (rawGap === null || r.position === 1) {
+      gap = "-";
+    } else {
+      const gapNum = Number(rawGap);
+      if (gapNum === 0) gap = "-";
+      else if (isNaN(gapNum)) gap = String(rawGap);
+      else gap = `+${gapNum.toFixed(3)}`;
+    }
+    return {
+      position: r.position,
+      driver: d?.full_name ?? `#${r.driver_number}`,
+      time: String(r.number_of_laps),
+      gap,
       team: d?.team_name ?? "Unknown",
       teamColor: toHexColor(d?.team_colour),
     };

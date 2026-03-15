@@ -17,7 +17,7 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
               <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Pos</th>
               <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Driver</th>
               <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Team</th>
-              <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Best Lap</th>
+              <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Laps</th>
               <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Gap</th>
             </tr>
           </thead>

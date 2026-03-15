@@ -27,6 +27,8 @@ import type {
   RaceControlEvent,
   RaceControlParams,
   Session,
+  SessionResult,
+  SessionResultParams,
   SessionsParams,
   Stint,
   StintsParams,
@@ -54,25 +56,53 @@ function buildQueryString(params: object): string {
   return parts.length > 0 ? `?${parts.join("&")}` : "";
 }
 
+// ─── Rate Limiter (max 3 req/sec) ─────────────────────────────────────────────
+
+/** Timestamps (ms) of requests dispatched within the current sliding window. */
+const _reqTimestamps: number[] = [];
+
+/**
+ * Schedule `fn` so that no more than 3 requests are dispatched per second.
+ * Uses a sliding-window check; retries after the oldest in-window request
+ * falls outside the 1-second boundary.
+ */
+function rateLimited<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const attempt = () => {
+      const now = Date.now();
+      // Drop timestamps older than 1 second
+      while (_reqTimestamps.length > 0 && now - _reqTimestamps[0] >= 1000) {
+        _reqTimestamps.shift();
+      }
+      if (_reqTimestamps.length < 3) {
+        _reqTimestamps.push(now);
+        fn().then(resolve).catch(reject);
+      } else {
+        // Wait until the oldest slot leaves the 1-second window (+ 20 ms buffer)
+        const waitMs = 1000 - (now - _reqTimestamps[0]) + 20;
+        setTimeout(attempt, waitMs);
+      }
+    };
+    attempt();
+  });
+}
+
 /**
  * Core fetch wrapper.  Validates HTTP status and deserialises JSON.
+ * All calls are routed through the rate limiter before being dispatched.
  */
 async function apiFetch<T>(endpoint: string, params: object = {}): Promise<T> {
   const url = `${BASE_URL}${endpoint}${buildQueryString(params)}`;
-
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `OpenF1 API error: ${response.status} ${response.statusText} — ${url}`
-    );
-  }
-
-  return response.json() as Promise<T>;
+  return rateLimited(() =>
+    fetch(url, { headers: { Accept: "application/json" } }).then((response) => {
+      if (!response.ok) {
+        throw new Error(
+          `OpenF1 API error: ${response.status} ${response.statusText} — ${url}`
+        );
+      }
+      return response.json() as Promise<T>;
+    })
+  );
 }
 
 // ─── Meetings ────────────────────────────────────────────────────────────────
@@ -234,7 +264,15 @@ export async function getRaceControl(sessionKey: number): Promise<RaceControlEve
   const params: RaceControlParams = { session_key: sessionKey };
   return apiFetch<RaceControlEvent[]>("/race_control", params);
 }
+// ─── Session Results ────────────────────────────────────────────────────────────
 
+/**
+ * Fetch final session results (positions, gaps, DNF/DNS/DSQ flags).
+ */
+export async function getSessionResults(sessionKey: number): Promise<SessionResult[]> {
+  const params: SessionResultParams = { session_key: sessionKey };
+  return apiFetch<SessionResult[]>("/session_result", params);
+}
 // ─── Convenience re-exports ──────────────────────────────────────────────────
 
 export { BASE_URL };

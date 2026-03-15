@@ -1,13 +1,12 @@
 import { useMemo } from "react";
 import { LeaderboardTable } from "../components/LeaderboardTable";
 import { LapTimeChart } from "../components/charts/LapTimeChart";
-import { TrackMap } from "../components/TrackMap";
 import { SessionInfoPanel } from "../components/SessionInfoPanel";
 import { StatsCard } from "../components/StatsCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
-import { useDriversData, useLapsData, useWeatherData, useCurrentSession } from "../hooks/useSessionData";
+import { useDriversData, useLapsData, useWeatherData, useCurrentSession, useSessionResultsData } from "../hooks/useSessionData";
 import { useSelectedSessionKey } from "../context/F1DataContext";
-import { buildLeaderboard, buildSessionInfo, buildLapTimeChartData, getBestLapFormatted } from "../utils/transformers";
+import { buildSessionInfo, buildLapTimeChartData, getBestLapFormatted, buildLeaderboardFromResults } from "../utils/transformers";
 import { Users, Clock, Gauge, TrendingUp } from "lucide-react";
 
 function NoSessionBanner() {
@@ -28,13 +27,14 @@ export function Dashboard() {
 
   const { data: drivers, loading: driversLoading } = useDriversData();
   const { data: laps, loading: lapsLoading, error: lapsError } = useLapsData();
+  const { data: sessionResults, loading: resultsLoading, error: resultsError } = useSessionResultsData();
   const { data: weatherData } = useWeatherData();
 
-  const isLoading = driversLoading || lapsLoading;
+  const isLoading = driversLoading || lapsLoading || resultsLoading;
 
   const latestWeather = weatherData.length > 0 ? weatherData[weatherData.length - 1] : null;
 
-  const leaderboard = useMemo(() => buildLeaderboard(laps, drivers), [laps, drivers]);
+  const leaderboard = useMemo(() => buildLeaderboardFromResults(sessionResults, drivers), [sessionResults, drivers]);
   const sessionInfo = useMemo(() => buildSessionInfo(session, latestWeather), [session, latestWeather]);
   const bestLap = useMemo(() => getBestLapFormatted(laps), [laps]);
 
@@ -80,9 +80,9 @@ export function Dashboard() {
         <div className="flex items-center justify-center h-64">
           <LoadingSpinner />
         </div>
-      ) : lapsError ? (
+      ) : lapsError || resultsError ? (
         <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 text-destructive text-sm">
-          Failed to load session data: {lapsError}
+          Failed to load session data: {lapsError ?? resultsError}
         </div>
       ) : (
         <>
@@ -94,15 +94,8 @@ export function Dashboard() {
             <StatsCard title="Best Lap" value={bestLap} icon={TrendingUp} color="#ff8800" />
           </div>
 
-          {/* Track Map + Session Info */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              <TrackMap />
-            </div>
-            <div>
-              <SessionInfoPanel info={sessionInfo} />
-            </div>
-          </div>
+          {/* Session Info */}
+          <SessionInfoPanel info={sessionInfo} />
 
           {/* Lap Time Chart */}
           {lapChartData.length > 0 && lapChartLines.length > 0 ? (

@@ -147,6 +147,21 @@ export interface Weather {
   rainfall: number;             // mm
 }
 
+// ─── Session Result ─────────────────────────────────────────────────────────
+
+export interface SessionResult {
+  session_key: number;
+  meeting_key: number;
+  driver_number: number;
+  position: number;
+  duration: number | null;      // best lap time in seconds
+  gap_to_leader: number | null; // gap to leader in seconds
+  number_of_laps: number;
+  dnf: boolean;
+  dns: boolean;
+  dsq: boolean;
+}
+
 // ─── Race Control ────────────────────────────────────────────────────────────
 
 export interface RaceControlEvent {
@@ -217,5 +232,9 @@ export interface WeatherParams {
 }
 
 export interface RaceControlParams {
+  session_key: number;
+}
+
+export interface SessionResultParams {
   session_key: number;
 }

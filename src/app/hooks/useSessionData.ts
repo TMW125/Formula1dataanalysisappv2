@@ -18,6 +18,7 @@ import {
   getPits,
   getPositions,
   getRaceControl,
+  getSessionResults,
   getStints,
   getWeather,
 } from "../services/openf1Api";
@@ -30,6 +31,7 @@ import type {
   Position,
   RaceControlEvent,
   Session,
+  SessionResult,
   Stint,
   Weather,
 } from "../types/openf1";
@@ -146,6 +148,12 @@ export function useIntervalsData(): FetchState<Interval> {
 export function useRaceControlData(): FetchState<RaceControlEvent> {
   const sessionKey = useSelectedSessionKey();
   return useFetchList(getRaceControl, sessionKey);
+}
+
+/** Final session results (positions, gaps, DNF/DNS/DSQ). */
+export function useSessionResultsData(): FetchState<SessionResult> {
+  const sessionKey = useSelectedSessionKey();
+  return useFetchList(getSessionResults, sessionKey);
 }
 
 // ─── Driver-scoped car data ───────────────────────────────────────────────────
