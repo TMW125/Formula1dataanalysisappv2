@@ -13,8 +13,21 @@ export interface Meeting {
   country_name: string;
   country_code: string;
   circuit_short_name: string;
+  circuit_type: string | null;
   year: number;
   date_start: string;
+  circuit_info_url: string | null;
+}
+
+// ─── Circuit Info ────────────────────────────────────────────────────────────
+
+export interface CircuitInfo {
+  /** X coordinates of the track outline (Cartesian). */
+  x: number[];
+  /** Y coordinates of the track outline (Cartesian). */
+  y: number[];
+  circuitName: string | null;
+  rotation: number | null;
 }
 
 // ─── Sessions ────────────────────────────────────────────────────────────────
@@ -128,7 +141,10 @@ export interface Pit {
   meeting_key: number;
   driver_number: number;
   lap_number: number;
-  pit_duration: number | null; // seconds
+  /** @deprecated Use lane_duration instead */
+  pit_duration: number | null;
+  lane_duration: number | null;  // time in pit lane, seconds
+  stop_duration: number | null;  // stationary time, seconds (from 2024 US GP)
   date: string;
 }
 
@@ -160,6 +176,73 @@ export interface SessionResult {
   dnf: boolean;
   dns: boolean;
   dsq: boolean;
+}
+
+// ─── Location ────────────────────────────────────────────────────────────────
+
+export interface Location {
+  session_key: number;
+  meeting_key: number;
+  driver_number: number;
+  date: string;
+  x: number;
+  y: number;
+  z: number;
+}
+
+// ─── Team Radio ───────────────────────────────────────────────────────────────
+
+export interface TeamRadio {
+  session_key: number;
+  meeting_key: number;
+  driver_number: number;
+  date: string;
+  recording_url: string;
+}
+
+// ─── Overtakes ────────────────────────────────────────────────────────────────
+
+export interface Overtake {
+  session_key: number;
+  meeting_key: number;
+  date: string;
+  overtaking_driver_number: number;
+  overtaken_driver_number: number;
+  position: number;
+}
+
+// ─── Starting Grid ────────────────────────────────────────────────────────────
+
+export interface StartingGrid {
+  session_key: number;
+  meeting_key: number;
+  driver_number: number;
+  position: number;
+  lap_duration: number | null;
+}
+
+// ─── Championship Drivers (beta) ──────────────────────────────────────────────
+
+export interface ChampionshipDriver {
+  session_key: number;
+  meeting_key: number;
+  driver_number: number;
+  points_current: number;
+  points_start: number;
+  position_current: number;
+  position_start: number;
+}
+
+// ─── Championship Teams (beta) ────────────────────────────────────────────────
+
+export interface ChampionshipTeam {
+  session_key: number;
+  meeting_key: number;
+  team_name: string;
+  points_current: number;
+  points_start: number;
+  position_current: number;
+  position_start: number;
 }
 
 // ─── Race Control ────────────────────────────────────────────────────────────
@@ -237,4 +320,34 @@ export interface RaceControlParams {
 
 export interface SessionResultParams {
   session_key: number;
+}
+
+export interface LocationParams {
+  session_key: number;
+  driver_number?: number;
+}
+
+export interface TeamRadioParams {
+  session_key: number;
+  driver_number?: number;
+}
+
+export interface OvertakesParams {
+  session_key: number;
+  overtaking_driver_number?: number;
+  overtaken_driver_number?: number;
+}
+
+export interface StartingGridParams {
+  session_key: number;
+}
+
+export interface ChampionshipDriversParams {
+  session_key: number;
+  driver_number?: number;
+}
+
+export interface ChampionshipTeamsParams {
+  session_key: number;
+  team_name?: string;
 }

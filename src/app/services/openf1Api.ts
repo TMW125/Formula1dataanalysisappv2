@@ -12,14 +12,22 @@
 import type {
   CarData,
   CarDataParams,
+  ChampionshipDriver,
+  ChampionshipDriversParams,
+  ChampionshipTeam,
+  ChampionshipTeamsParams,
   DriversParams,
   Interval,
   IntervalsParams,
   Lap,
   LapsParams,
+  Location,
+  LocationParams,
   Meeting,
   MeetingsParams,
   OpenF1Driver,
+  Overtake,
+  OvertakesParams,
   Pit,
   PitsParams,
   Position,
@@ -30,8 +38,12 @@ import type {
   SessionResult,
   SessionResultParams,
   SessionsParams,
+  StartingGrid,
+  StartingGridParams,
   Stint,
   StintsParams,
+  TeamRadio,
+  TeamRadioParams,
   Weather,
   WeatherParams,
 } from "../types/openf1";
@@ -272,6 +284,74 @@ export async function getRaceControl(sessionKey: number): Promise<RaceControlEve
 export async function getSessionResults(sessionKey: number): Promise<SessionResult[]> {
   const params: SessionResultParams = { session_key: sessionKey };
   return apiFetch<SessionResult[]>("/session_result", params);
+}// ─── Location ────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch approximate car location data (~3.7 Hz) for a session.
+ *
+ * ⚠️  This endpoint returns very large payloads for full sessions.
+ * Always filter by driver_number in the explorer.
+ */
+export async function getLocation(sessionKey: number, driverNumber?: number): Promise<Location[]> {
+  const params: LocationParams = { session_key: sessionKey };
+  if (driverNumber !== undefined) params.driver_number = driverNumber;
+  return apiFetch<Location[]>("/location", params);
+}
+
+// ─── Team Radio ────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch team radio recordings for a session.
+ * Note: only a limited selection of communications are included.
+ */
+export async function getTeamRadio(sessionKey: number, driverNumber?: number): Promise<TeamRadio[]> {
+  const params: TeamRadioParams = { session_key: sessionKey };
+  if (driverNumber !== undefined) params.driver_number = driverNumber;
+  return apiFetch<TeamRadio[]>("/team_radio", params);
+}
+
+// ─── Overtakes ────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch overtake data for a session.
+ * Only available during races and may be incomplete.
+ */
+export async function getOvertakes(sessionKey: number): Promise<Overtake[]> {
+  const params: OvertakesParams = { session_key: sessionKey };
+  return apiFetch<Overtake[]>("/overtakes", params);
+}
+
+// ─── Starting Grid ───────────────────────────────────────────────────────────
+
+/**
+ * Fetch the starting grid for a race session.
+ * Data becomes available a few minutes after official results are published.
+ */
+export async function getStartingGrid(sessionKey: number): Promise<StartingGrid[]> {
+  const params: StartingGridParams = { session_key: sessionKey };
+  return apiFetch<StartingGrid[]>("/starting_grid", params);
+}
+
+// ─── Championship Drivers (beta) ──────────────────────────────────────────────
+
+/**
+ * Fetch driver championship standings for a (race) session.
+ * Only available for race sessions.
+ */
+export async function getChampionshipDrivers(sessionKey: number): Promise<ChampionshipDriver[]> {
+  const params: ChampionshipDriversParams = { session_key: sessionKey };
+  return apiFetch<ChampionshipDriver[]>("/championship_drivers", params);
+}
+
+// ─── Championship Teams (beta) ────────────────────────────────────────────────
+
+/**
+ * Fetch team championship standings for a (race) session.
+ * Only available for race sessions.
+ */
+export async function getChampionshipTeams(sessionKey: number): Promise<ChampionshipTeam[]> {
+  const params: ChampionshipTeamsParams = { session_key: sessionKey };
+  return apiFetch<ChampionshipTeam[]>("/championship_teams", params);
 }
 // ─── Convenience re-exports ──────────────────────────────────────────────────
 

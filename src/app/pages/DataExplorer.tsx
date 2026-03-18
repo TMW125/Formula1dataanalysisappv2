@@ -4,9 +4,59 @@ import { useDriversData, useExplorerData } from "../hooks/useSessionData";
 import { useSelectedSessionKey } from "../context/F1DataContext";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 
-type ExplorerEndpoint = "laps" | "car_data" | "drivers" | "positions" | "stints" | "weather";
+type ExplorerEndpoint =
+  | "laps"
+  | "car_data"
+  | "drivers"
+  | "positions"
+  | "stints"
+  | "weather"
+  | "intervals"
+  | "pit"
+  | "race_control"
+  | "session_result"
+  | "location"
+  | "team_radio"
+  | "overtakes"
+  | "starting_grid"
+  | "championship_drivers"
+  | "championship_teams"
+  | "meetings"
+  | "sessions";
 
-const ENDPOINTS: ExplorerEndpoint[] = ["laps", "car_data", "drivers", "positions", "stints", "weather"];
+const ENDPOINTS: ExplorerEndpoint[] = [
+  "laps",
+  "car_data",
+  "drivers",
+  "positions",
+  "intervals",
+  "stints",
+  "pit",
+  "race_control",
+  "session_result",
+  "weather",
+  "starting_grid",
+  "overtakes",
+  "location",
+  "team_radio",
+  "championship_drivers",
+  "championship_teams",
+  "meetings",
+  "sessions",
+];
+
+/** Endpoints where driver_number has no effect on the API response */
+const NO_DRIVER_FILTER: Set<ExplorerEndpoint> = new Set([
+  "weather",
+  "race_control",
+  "session_result",
+  "overtakes",
+  "starting_grid",
+  "championship_drivers",
+  "championship_teams",
+  "meetings",
+  "sessions",
+]);
 
 export function DataExplorer() {
   const sessionKey = useSelectedSessionKey();
@@ -78,11 +128,14 @@ export function DataExplorer() {
 
           {/* Driver Filter */}
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm text-muted-foreground mb-2">Filter by Driver</label>
+            <label className="block text-sm text-muted-foreground mb-2">
+              Filter by Driver{NO_DRIVER_FILTER.has(endpoint) ? " (not applicable for this endpoint)" : ""}
+            </label>
             <select
               value={driverNumber ?? ""}
               onChange={(e) => setDriverNumber(e.target.value ? Number(e.target.value) : null)}
-              className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={NO_DRIVER_FILTER.has(endpoint)}
+              className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <option value="">All Drivers</option>
               {drivers.map((driver) => (
@@ -139,6 +192,12 @@ export function DataExplorer() {
       </div>
 
       {/* Loading / Error */}
+      {endpoint === "location" && (
+        <div className="bg-yellow-950/30 border border-yellow-700 text-yellow-400 px-4 py-3 rounded-lg text-sm">
+          <strong>High-volume endpoint:</strong> /location samples at ~3.7 Hz and can return tens of thousands of rows
+          per session. Filter by a specific driver to keep response sizes manageable.
+        </div>
+      )}
       {loading && <LoadingSpinner />}
       {error && (
         <div className="bg-red-950/30 border border-red-800 text-red-400 px-4 py-3 rounded-lg text-sm">

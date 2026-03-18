@@ -1,13 +1,13 @@
 import { useMemo } from "react";
 import { LeaderboardTable } from "../components/LeaderboardTable";
 import { LapTimeChart } from "../components/charts/LapTimeChart";
-import { SessionInfoPanel } from "../components/SessionInfoPanel";
 import { StatsCard } from "../components/StatsCard";
+import { TrackMap } from "../components/TrackMap";
 import { LoadingSpinner } from "../components/LoadingSpinner";
-import { useDriversData, useLapsData, useWeatherData, useCurrentSession, useSessionResultsData } from "../hooks/useSessionData";
-import { useSelectedSessionKey } from "../context/F1DataContext";
+import { useDriversData, useLapsData, useWeatherData, useCurrentSession, useSessionResultsData, useCircuitInfo } from "../hooks/useSessionData";
+import { useSelectedSessionKey, useMeetings, useSelectedMeetingKey } from "../context/F1DataContext";
 import { buildSessionInfo, buildLapTimeChartData, getBestLapFormatted, buildLeaderboardFromResults } from "../utils/transformers";
-import { Users, Clock, Gauge, TrendingUp } from "lucide-react";
+import { TrendingUp, MapPin, Cloud, Route } from "lucide-react";
 
 function NoSessionBanner() {
   return (
@@ -23,12 +23,16 @@ function NoSessionBanner() {
 
 export function Dashboard() {
   const sessionKey = useSelectedSessionKey();
+  const meetingKey = useSelectedMeetingKey();
+  const { meetings } = useMeetings();
+  const currentMeeting = meetings.find((m) => m.meeting_key === meetingKey) ?? null;
   const session = useCurrentSession();
 
   const { data: drivers, loading: driversLoading } = useDriversData();
   const { data: laps, loading: lapsLoading, error: lapsError } = useLapsData();
   const { data: sessionResults, loading: resultsLoading, error: resultsError } = useSessionResultsData();
   const { data: weatherData } = useWeatherData();
+  const { circuitInfo } = useCircuitInfo();
 
   const isLoading = driversLoading || lapsLoading || resultsLoading;
 
@@ -86,16 +90,29 @@ export function Dashboard() {
         </div>
       ) : (
         <>
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatsCard title="Total Drivers" value={drivers.length > 0 ? String(drivers.length) : "—"} icon={Users} color="#E10600" />
-            <StatsCard title="Session" value={session?.session_name ?? "—"} icon={Clock} color="#0090ff" />
-            <StatsCard title="Air Temp" value={latestWeather ? `${latestWeather.air_temperature}°C` : "—"} icon={Gauge} color="#00D2BE" />
-            <StatsCard title="Best Lap" value={bestLap} icon={TrendingUp} color="#ff8800" />
-          </div>
+          {/* Stats Cards + Track Map */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            {/* Stats column */}
+            <div className="flex flex-col gap-6">
+              <StatsCard title="Track" value={sessionInfo.track} icon={MapPin} color="#7C3AED" />
+              <StatsCard title="Circuit Type" value={currentMeeting?.circuit_type ?? "—"} icon={Route} color="#E10600" />
+              <StatsCard title="Weather" value={sessionInfo.weather} icon={Cloud} color="#0EA5E9" />
+              <StatsCard title="Best Lap" value={bestLap} icon={TrendingUp} color="#ff8800" />
+            </div>
 
-          {/* Session Info */}
-          <SessionInfoPanel info={sessionInfo} />
+            {/* Track Map */}
+            {circuitInfo && circuitInfo.x.length > 0 ? (
+              <div className="bg-card border border-border rounded-lg p-4 flex flex-col h-0 min-h-full overflow-hidden">
+                <div className="flex-1 min-h-0">
+                  <TrackMap x={circuitInfo.x} y={circuitInfo.y} className="w-full h-full" />
+                </div>
+              </div>
+            ) : (
+              <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-center text-muted-foreground text-sm h-0 min-h-full">
+                Track map unavailable
+              </div>
+            )}
+          </div>
 
           {/* Lap Time Chart */}
           {lapChartData.length > 0 && lapChartLines.length > 0 ? (

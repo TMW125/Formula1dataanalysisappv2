@@ -180,11 +180,16 @@ export function F1DataProvider({ children }: F1DataProviderProps) {
       try {
         const meetings = await getMeetingsBySeason(state.selectedSeason);
         if (!cancelled) {
-          // Sort chronologically
-          const sorted = [...meetings].sort(
+          // Filter to meetings that have already started, then sort chronologically
+          const now = new Date();
+          const past = meetings.filter((m) => new Date(m.date_start) <= now);
+          const sorted = [...past].sort(
             (a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime()
           );
           dispatch({ type: "MEETINGS_SUCCESS", payload: sorted });
+          // Default to the latest (last) meeting
+          const latest = sorted[sorted.length - 1];
+          dispatch({ type: "SET_MEETING_KEY", payload: latest?.meeting_key ?? null });
         }
       } catch (err) {
         if (!cancelled) {
@@ -217,6 +222,9 @@ export function F1DataProvider({ children }: F1DataProviderProps) {
             (a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime()
           );
           dispatch({ type: "SESSIONS_SUCCESS", payload: sorted });
+          // Default to the latest (last) session
+          const latest = sorted[sorted.length - 1];
+          dispatch({ type: "SET_SESSION_KEY", payload: latest?.session_key ?? null });
         }
       } catch (err) {
         if (!cancelled) {

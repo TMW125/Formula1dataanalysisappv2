@@ -9,21 +9,30 @@
  */
 
 import { useEffect, useState } from "react";
-import { useF1Data, useSelectedSessionKey, useSessions } from "../context/F1DataContext";
+import { useF1Data, useMeetings, useSelectedMeetingKey, useSelectedSessionKey, useSessions } from "../context/F1DataContext";
 import {
   getCarData,
+  getChampionshipDrivers,
+  getChampionshipTeams,
   getDrivers,
   getIntervals,
   getLaps,
+  getLocation,
+  getMeetingByKey,
+  getOvertakes,
   getPits,
   getPositions,
   getRaceControl,
   getSessionResults,
+  getSessionsByMeeting,
+  getStartingGrid,
   getStints,
+  getTeamRadio,
   getWeather,
 } from "../services/openf1Api";
 import type {
   CarData,
+  CircuitInfo,
   Interval,
   Lap,
   OpenF1Driver,
@@ -212,7 +221,19 @@ type ExplorerEndpoint =
   | "drivers"
   | "positions"
   | "stints"
-  | "weather";
+  | "weather"
+  | "intervals"
+  | "pit"
+  | "race_control"
+  | "session_result"
+  | "location"
+  | "team_radio"
+  | "overtakes"
+  | "starting_grid"
+  | "championship_drivers"
+  | "championship_teams"
+  | "meetings"
+  | "sessions";
 
 /**
  * Fetches data for a given endpoint in the current session.
@@ -224,6 +245,7 @@ export function useExplorerData(
   driverNumber: number | null
 ): FetchState<Record<string, unknown>> & { refetch: () => void } {
   const sessionKey = useSelectedSessionKey();
+  const currentSession = useCurrentSession();
   const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +260,7 @@ export function useExplorerData(
     setLoading(true);
     setError(null);
 
+    const meetingKey = currentSession?.meeting_key;
     const fetchers: Record<ExplorerEndpoint, () => Promise<unknown[]>> = {
       laps: () => getLaps(sessionKey, driverNumber ?? undefined),
       car_data: () => getCarData(sessionKey, driverNumber ?? undefined),
@@ -245,6 +268,18 @@ export function useExplorerData(
       positions: () => getPositions(sessionKey, driverNumber ?? undefined),
       stints: () => getStints(sessionKey, driverNumber ?? undefined),
       weather: () => getWeather(sessionKey),
+      intervals: () => getIntervals(sessionKey, driverNumber ?? undefined),
+      pit: () => getPits(sessionKey, driverNumber ?? undefined),
+      race_control: () => getRaceControl(sessionKey),
+      session_result: () => getSessionResults(sessionKey),
+      location: () => getLocation(sessionKey, driverNumber ?? undefined),
+      team_radio: () => getTeamRadio(sessionKey, driverNumber ?? undefined),
+      overtakes: () => getOvertakes(sessionKey),
+      starting_grid: () => getStartingGrid(sessionKey),
+      championship_drivers: () => getChampionshipDrivers(sessionKey),
+      championship_teams: () => getChampionshipTeams(sessionKey),
+      meetings: () => meetingKey ? getMeetingByKey(meetingKey) : Promise.resolve([]),
+      sessions: () => meetingKey ? getSessionsByMeeting(meetingKey) : Promise.resolve([]),
     };
 
     (fetchers[endpoint] ?? fetchers.laps)()
@@ -264,7 +299,65 @@ export function useExplorerData(
     return () => {
       cancelled = true;
     };
-  }, [sessionKey, endpoint, driverNumber, trigger]);
+  }, [sessionKey, currentSession, endpoint, driverNumber, trigger]);
 
   return { data, loading, error, refetch };
+}
+
+// ─── Circuit info ─────────────────────────────────────────────────────────────
+
+/**
+ * Fetches circuit track-layout data (x/y coordinates) from the
+ * `circuit_info_url` field of the currently selected meeting.
+ *
+ * Returns `null` while loading or when no URL is available.
+ */
+export function useCircuitInfo(): { circuitInfo: CircuitInfo | null; loading: boolean } {
+  const meetingKey = useSelectedMeetingKey();
+  const { meetings } = useMeetings();
+  const [circuitInfo, setCircuitInfo] = useState<CircuitInfo | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const meeting = meetings.find((m) => m.meeting_key === meetingKey);
+    const url = meeting?.circuit_info_url ?? null;
+
+    if (!url) {
+      setCircuitInfo(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
+    fetch(url, { headers: { Accept: "application/json" } })
+      .then((res) => {
+        if (!res.ok) throw new Error(`circuit_info fetch failed: ${res.status}`);
+        return res.json() as Promise<{ x: number[]; y: number[]; circuitName?: string; rotation?: number }>;
+      })
+      .then((raw) => {
+        if (!cancelled) {
+          setCircuitInfo({
+            x: raw.x ?? [],
+            y: raw.y ?? [],
+            circuitName: raw.circuitName ?? null,
+            rotation: raw.rotation ?? null,
+          });
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCircuitInfo(null);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [meetingKey, meetings]);
+
+  return { circuitInfo, loading };
 }
