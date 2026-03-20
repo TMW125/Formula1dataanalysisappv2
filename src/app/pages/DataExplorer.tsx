@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Download, Filter } from "lucide-react";
 import { useDriversData, useExplorerData } from "../hooks/useSessionData";
 import { useSelectedSessionKey } from "../context/F1DataContext";
@@ -65,6 +65,13 @@ export function DataExplorer() {
   const [viewMode, setViewMode] = useState<"json" | "table">("table");
 
   const { data: drivers } = useDriversData();
+  const sortedDrivers = useMemo(
+    () =>
+      [...drivers].sort(
+        (a, b) => a.team_name.localeCompare(b.team_name) || a.full_name.localeCompare(b.full_name)
+      ),
+    [drivers]
+  );
   const { data, loading, error, refetch } = useExplorerData(endpoint, driverNumber);
 
   const handleExport = () => {
@@ -138,7 +145,7 @@ export function DataExplorer() {
               className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <option value="">All Drivers</option>
-              {drivers.map((driver) => (
+              {sortedDrivers.map((driver) => (
                 <option key={driver.driver_number} value={driver.driver_number}>
                   {driver.full_name} ({driver.name_acronym})
                 </option>

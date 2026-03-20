@@ -94,7 +94,7 @@ export interface CarData {
   date: string;
   speed: number;               // km/h
   rpm: number;
-  gear: number;
+  n_gear: number;
   throttle: number;            // 0–100
   brake: number;               // 0 or 100 (boolean-like in the API)
   drs: number;                 // 0=off, 10/12/14=on

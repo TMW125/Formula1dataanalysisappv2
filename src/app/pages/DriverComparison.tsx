@@ -24,12 +24,20 @@ export function DriverComparison() {
   const { data: drivers, loading: driversLoading } = useDriversData();
   const { data: laps, loading: lapsLoading } = useLapsData();
 
+  const sortedDrivers = useMemo(
+    () =>
+      [...drivers].sort(
+        (a, b) => a.team_name.localeCompare(b.team_name) || a.full_name.localeCompare(b.full_name)
+      ),
+    [drivers]
+  );
+
   const [driverANum, setDriverANum] = useState<number | null>(null);
   const [driverBNum, setDriverBNum] = useState<number | null>(null);
 
   // Default to first two drivers once the list loads
-  const effectiveA = driverANum ?? (drivers.length > 0 ? drivers[0].driver_number : null);
-  const effectiveB = driverBNum ?? (drivers.length > 1 ? drivers[1].driver_number : null);
+  const effectiveA = driverANum ?? (sortedDrivers.length > 0 ? sortedDrivers[0].driver_number : null);
+  const effectiveB = driverBNum ?? (sortedDrivers.length > 1 ? sortedDrivers[1].driver_number : null);
 
   const driverA = drivers.find((d) => d.driver_number === effectiveA) ?? null;
   const driverB = drivers.find((d) => d.driver_number === effectiveB) ?? null;
@@ -163,7 +171,7 @@ export function DriverComparison() {
                 onChange={(e) => setDriverANum(Number(e.target.value))}
                 className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                {drivers.map((d) => (
+                {sortedDrivers.map((d) => (
                   <option key={d.driver_number} value={d.driver_number}>
                     {d.full_name}
                   </option>
@@ -184,7 +192,7 @@ export function DriverComparison() {
                 onChange={(e) => setDriverBNum(Number(e.target.value))}
                 className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                {drivers.map((d) => (
+                {sortedDrivers.map((d) => (
                   <option key={d.driver_number} value={d.driver_number}>
                     {d.full_name}
                   </option>

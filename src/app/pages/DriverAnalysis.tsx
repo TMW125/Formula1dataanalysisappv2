@@ -33,12 +33,20 @@ export function DriverAnalysis() {
   const { data: laps, loading: lapsLoading } = useLapsData();
   const { data: stints } = useStintsData();
 
+  const sortedDrivers = useMemo(
+    () =>
+      [...drivers].sort(
+        (a, b) => a.team_name.localeCompare(b.team_name) || a.full_name.localeCompare(b.full_name)
+      ),
+    [drivers]
+  );
+
   // Selected driver state — default to first driver once loaded
   const [selectedDriverNumber, setSelectedDriverNumber] = useState<number | null>(null);
 
   // Resolve driver once list arrives
   const effectiveDriverNum =
-    selectedDriverNumber ?? (drivers.length > 0 ? drivers[0].driver_number : null);
+    selectedDriverNumber ?? (sortedDrivers.length > 0 ? sortedDrivers[0].driver_number : null);
 
   const selectedDriver = drivers.find((d) => d.driver_number === effectiveDriverNum) ?? null;
 
@@ -72,8 +80,8 @@ export function DriverAnalysis() {
     return valid.length > 0 ? formatLapTime(Math.min(...valid)) : "—";
   }, [driverLaps]);
 
-  // Telemetry built from car data
-  const telemetry = useMemo(() => buildCarTelemetry(carData), [carData]);
+  // Telemetry built from car data, filtered to the selected lap's time window
+  const telemetry = useMemo(() => buildCarTelemetry(carData, lapData), [carData, lapData]);
 
   // Sample down for performance (show max 500 points in chart)
   const telemetrySampled = useMemo(() => {
@@ -122,7 +130,7 @@ export function DriverAnalysis() {
                 }}
                 className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary min-w-[200px]"
               >
-                {drivers.map((d) => (
+                {sortedDrivers.map((d) => (
                   <option key={d.driver_number} value={d.driver_number}>
                     {d.full_name} — {d.team_name}
                   </option>

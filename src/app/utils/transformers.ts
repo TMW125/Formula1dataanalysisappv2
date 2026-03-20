@@ -197,9 +197,13 @@ export function buildLapTimeChartData(
 /**
  * Convert CarData[] to the telemetry chart data format (sample-indexed).
  * The `distance` field is a sequential index (× 10 for cosmetic spacing).
+ *
+ * When `lap` is supplied (and has a valid `date_start` + `lap_duration`), only
+ * samples that fall within that lap's time window are included.
  */
 export function buildCarTelemetry(
-  carData: CarData[]
+  carData: CarData[],
+  lap?: Lap | null
 ): Array<{
   distance: number;
   speed: number;
@@ -208,12 +212,21 @@ export function buildCarTelemetry(
   gear: number;
   rpm: number;
 }> {
-  return carData.map((pt, idx) => ({
+  let filtered = carData;
+  if (lap && lap.date_start && lap.lap_duration !== null) {
+    const lapStart = new Date(lap.date_start).getTime();
+    const lapEnd = lapStart + lap.lap_duration * 1000;
+    filtered = carData.filter((pt) => {
+      const t = new Date(pt.date).getTime();
+      return t >= lapStart && t < lapEnd;
+    });
+  }
+  return filtered.map((pt, idx) => ({
     distance: idx * 10,
     speed: pt.speed,
     throttle: pt.throttle,
     brake: pt.brake > 0 ? 100 : 0,
-    gear: pt.gear,
+    gear: pt.n_gear,
     rpm: pt.rpm,
   }));
 }
