@@ -222,8 +222,11 @@ export function F1DataProvider({ children }: F1DataProviderProps) {
             (a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime()
           );
           dispatch({ type: "SESSIONS_SUCCESS", payload: sorted });
-          // Default to the latest (last) session
-          const latest = sorted[sorted.length - 1];
+          // Default to the latest session that has already started; fall back to
+          // the first session if none have started yet
+          const now = new Date();
+          const past = sorted.filter((s) => new Date(s.date_start) <= now);
+          const latest = past.length > 0 ? past[past.length - 1] : sorted[0];
           dispatch({ type: "SET_SESSION_KEY", payload: latest?.session_key ?? null });
         }
       } catch (err) {
