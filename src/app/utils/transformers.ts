@@ -347,6 +347,7 @@ export interface PaceDataPoint {
   stint: string;
   avgPace: number;
   color: string;
+  compound: TireCompound;
 }
 
 export function buildPaceData(
@@ -384,10 +385,11 @@ export function buildPaceData(
       stint: `${d?.name_acronym ?? stint.driver_number} ${capitalize(stint.compound)} (${stint.lap_start}-${stint.lap_end ?? "?"})`,
       avgPace: parseFloat(avg.toFixed(3)),
       color: toHexColor(d?.team_colour),
+      compound: (stint.compound as TireCompound) ?? "UNKNOWN",
     });
   }
 
-  return result;
+  return result.sort((a, b) => a.avgPace - b.avgPace);
 }
 
 // ─── Stats helpers ────────────────────────────────────────────────────────────
