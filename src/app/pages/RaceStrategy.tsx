@@ -263,7 +263,7 @@ export function RaceStrategy() {
                         />
                         <Bar dataKey="avgPace" radius={[4, 4, 0, 0]}>
                           {compoundData.map((entry) => (
-                            <Cell key={`cell-${compound}-${entry.stint}-${entry.driver}`} fill={entry.color} />
+                            <Cell key={`cell-${compound}-${entry.stint}`} fill={entry.color} />
                           ))}
                         </Bar>
                       </BarChart>
