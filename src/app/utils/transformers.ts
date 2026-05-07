@@ -355,6 +355,14 @@ export function buildPaceData(
   stints: Stint[],
   drivers: OpenF1Driver[]
 ): PaceDataPoint[] {
+  const isTireCompound = (value: string | null | undefined): value is TireCompound =>
+    value === "SOFT" ||
+    value === "MEDIUM" ||
+    value === "HARD" ||
+    value === "INTERMEDIATE" ||
+    value === "WET" ||
+    value === "UNKNOWN";
+
   const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
   const lapMap = new Map<string, number[]>(); // "driverNum-stintNum" → durations
 
@@ -380,12 +388,13 @@ export function buildPaceData(
     if (!durations || durations.length === 0) continue;
     const avg = durations.reduce((a, b) => a + b, 0) / durations.length;
     const d = driverMap.get(stint.driver_number);
+    const compound = isTireCompound(stint.compound) ? stint.compound : "UNKNOWN";
     result.push({
       driver: d?.name_acronym ?? `#${stint.driver_number}`,
       stint: `${d?.name_acronym ?? stint.driver_number} ${capitalize(stint.compound)} (${stint.lap_start}-${stint.lap_end ?? "?"})`,
       avgPace: parseFloat(avg.toFixed(3)),
       color: toHexColor(d?.team_colour),
-      compound: (stint.compound as TireCompound) ?? "UNKNOWN",
+      compound,
     });
   }
 
