@@ -14,6 +14,7 @@ import {
 import { Flag, Clock, TrendingDown } from "lucide-react";
 import { useDriversData, useLapsData, usePitsData, useStintsData } from "../hooks/useSessionData";
 import { useSelectedSessionKey } from "../context/F1DataContext";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import {
   buildPaceData,
   buildPitStops,
@@ -34,6 +35,14 @@ export function RaceStrategy() {
   const stintTimeline = useMemo(() => buildStintTimeline(stints, drivers), [stints, drivers]);
   const pitStops = useMemo(() => buildPitStops(pits, drivers, stints), [pits, drivers, stints]);
   const paceData = useMemo(() => buildPaceData(laps, stints, drivers), [laps, stints, drivers]);
+  const paceDataByCompound = useMemo(
+    () => ({
+      SOFT: paceData.filter((entry) => entry.compound === "SOFT"),
+      MEDIUM: paceData.filter((entry) => entry.compound === "MEDIUM"),
+      HARD: paceData.filter((entry) => entry.compound === "HARD"),
+    }),
+    [paceData]
+  );
 
   // Per-driver lap scatter data: top 5 drivers by number of laps
   const lapScatterSeries = useMemo(() => {
@@ -211,40 +220,59 @@ export function RaceStrategy() {
         {paceData.length === 0 ? (
           <p className="text-muted-foreground text-sm">No pace data available.</p>
         ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={paceData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
-              <XAxis
-                dataKey="stint"
-                stroke="#9ca3af"
-                tick={{ fill: "#9ca3af", fontSize: 10 }}
-                interval={0}
-                angle={-25}
-                textAnchor="end"
-                height={60}
-              />
-              <YAxis
-                stroke="#9ca3af"
-                tick={{ fill: "#9ca3af", fontSize: 12 }}
-                label={{ value: "Avg Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#15151c",
-                  border: "1px solid #2a2a36",
-                  borderRadius: "0.375rem",
-                  color: "#f5f5f5",
-                }}
-                labelStyle={{ color: "#9ca3af" }}
-                formatter={(value: number) => [value.toFixed(3) + "s", "Avg pace"]}
-              />
-              <Bar dataKey="avgPace" radius={[4, 4, 0, 0]}>
-                {paceData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <Tabs defaultValue="SOFT" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="SOFT">Soft</TabsTrigger>
+              <TabsTrigger value="MEDIUM">Medium</TabsTrigger>
+              <TabsTrigger value="HARD">Hard</TabsTrigger>
+            </TabsList>
+
+            {(["SOFT", "MEDIUM", "HARD"] as const).map((compound) => {
+              const compoundData = paceDataByCompound[compound];
+              return (
+                <TabsContent key={compound} value={compound}>
+                  {compoundData.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No {compound.toLowerCase()} compound pace data available.</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={compoundData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
+                        <XAxis
+                          dataKey="stint"
+                          stroke="#9ca3af"
+                          tick={{ fill: "#9ca3af", fontSize: 10 }}
+                          interval={0}
+                          angle={-25}
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis
+                          stroke="#9ca3af"
+                          tick={{ fill: "#9ca3af", fontSize: 12 }}
+                          label={{ value: "Avg Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#15151c",
+                            border: "1px solid #2a2a36",
+                            borderRadius: "0.375rem",
+                            color: "#f5f5f5",
+                          }}
+                          labelStyle={{ color: "#9ca3af" }}
+                          formatter={(value: number) => [value.toFixed(3) + "s", "Avg pace"]}
+                        />
+                        <Bar dataKey="avgPace" radius={[4, 4, 0, 0]}>
+                          {compoundData.map((entry, index) => (
+                            <Cell key={`cell-${compound}-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </TabsContent>
+              );
+            })}
+          </Tabs>
         )}
       </div>
 
