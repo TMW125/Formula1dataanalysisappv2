@@ -262,8 +262,8 @@ export function RaceStrategy() {
                           formatter={(value: number) => [value.toFixed(3) + "s", "Avg pace"]}
                         />
                         <Bar dataKey="avgPace" radius={[4, 4, 0, 0]}>
-                          {compoundData.map((entry, index) => (
-                            <Cell key={`cell-${compound}-${index}`} fill={entry.color} />
+                          {compoundData.map((entry) => (
+                            <Cell key={`cell-${compound}-${entry.stint}-${entry.driver}`} fill={entry.color} />
                           ))}
                         </Bar>
                       </BarChart>
