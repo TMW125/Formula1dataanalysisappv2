@@ -356,12 +356,7 @@ export function buildPaceData(
   drivers: OpenF1Driver[]
 ): PaceDataPoint[] {
   const isTireCompound = (value: string | null | undefined): value is TireCompound =>
-    value === "SOFT" ||
-    value === "MEDIUM" ||
-    value === "HARD" ||
-    value === "INTERMEDIATE" ||
-    value === "WET" ||
-    value === "UNKNOWN";
+    Object.prototype.hasOwnProperty.call(TIRE_COLORS, value ?? "");
 
   const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
   const lapMap = new Map<string, number[]>(); // "driverNum-stintNum" → durations
