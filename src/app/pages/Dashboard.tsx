@@ -1,12 +1,11 @@
 import { useMemo } from "react";
 import { LeaderboardTable } from "../components/LeaderboardTable";
-import { LapTimeChart } from "../components/charts/LapTimeChart";
 import { StatsCard } from "../components/StatsCard";
 import { TrackMap } from "../components/TrackMap";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { useDriversData, useLapsData, useWeatherData, useCurrentSession, useSessionResultsData, useCircuitInfo } from "../hooks/useSessionData";
 import { useSelectedSessionKey, useMeetings, useSelectedMeetingKey } from "../context/F1DataContext";
-import { buildSessionInfo, buildLapTimeChartData, getBestLapFormatted, buildLeaderboardFromResults } from "../utils/transformers";
+import { buildSessionInfo, getBestLapFormatted, buildLeaderboardFromResults } from "../utils/transformers";
 import { TrendingUp, MapPin, Cloud, Route } from "lucide-react";
 
 function NoSessionBanner() {
@@ -41,34 +40,6 @@ export function Dashboard() {
   const leaderboard = useMemo(() => buildLeaderboardFromResults(sessionResults, drivers), [sessionResults, drivers]);
   const sessionInfo = useMemo(() => buildSessionInfo(session, latestWeather), [session, latestWeather]);
   const bestLap = useMemo(() => getBestLapFormatted(laps), [laps]);
-
-  // Top 5 drivers for lap time chart
-  const top5DriverNums = useMemo(
-    () =>
-      leaderboard
-        .slice(0, 5)
-        .map((r) => drivers.find((d) => d.full_name === r.driver)?.driver_number)
-        .filter((n): n is number => n !== undefined),
-    [leaderboard, drivers]
-  );
-
-  const lapChartLines = useMemo(
-    () =>
-      leaderboard.slice(0, 5).map((row) => {
-        const d = drivers.find((drv) => drv.full_name === row.driver);
-        return {
-          key: (d?.name_acronym ?? row.driver.split(" ").pop() ?? "").toLowerCase(),
-          color: row.teamColor,
-          name: row.driver,
-        };
-      }),
-    [leaderboard, drivers]
-  );
-
-  const lapChartData = useMemo(
-    () => buildLapTimeChartData(laps, drivers, top5DriverNums),
-    [laps, drivers, top5DriverNums]
-  );
 
   return (
     <div className="p-6 space-y-6">
@@ -113,15 +84,6 @@ export function Dashboard() {
               </div>
             )}
           </div>
-
-          {/* Lap Time Chart */}
-          {lapChartData.length > 0 && lapChartLines.length > 0 ? (
-            <LapTimeChart data={lapChartData} lines={lapChartLines} height={250} />
-          ) : (
-            <div className="bg-card border border-border rounded-lg p-6 text-center text-muted-foreground text-sm">
-              No lap time data available for this session yet.
-            </div>
-          )}
 
           {/* Leaderboard */}
           {leaderboard.length > 0 ? (
