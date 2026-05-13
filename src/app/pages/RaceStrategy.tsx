@@ -23,6 +23,8 @@ import {
 } from "../utils/transformers";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 
+const MIN_STINT_TIMELINE_WIDTH_PX = 520;
+
 export function RaceStrategy() {
   const sessionKey = useSelectedSessionKey();
   const { data: drivers, loading: driversLoading } = useDriversData();
@@ -146,7 +148,7 @@ export function RaceStrategy() {
                   {row.driverName}
                 </p>
                 <div className="overflow-x-auto">
-                  <div className="min-w-[520px]">
+                  <div style={{ minWidth: `${MIN_STINT_TIMELINE_WIDTH_PX}px` }}>
                     <div className="flex gap-1 h-12">
                       {row.stints.map((s, i) => (
                         <div
