@@ -23,7 +23,7 @@ import {
 } from "../utils/transformers";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 
-const MIN_STINT_TIMELINE_WIDTH_PX = 520;
+const MIN_STINT_LABEL_WIDTH_PCT = 8;
 
 export function RaceStrategy() {
   const sessionKey = useSelectedSessionKey();
@@ -147,31 +147,28 @@ export function RaceStrategy() {
                 <p className="text-sm text-muted-foreground mb-2" style={{ color: row.color }}>
                   {row.driverName}
                 </p>
-                <div className="overflow-x-auto">
-                  <div style={{ minWidth: `${MIN_STINT_TIMELINE_WIDTH_PX}px` }}>
-                    <div className="flex gap-1 h-12">
-                      {row.stints.map((s, i) => (
-                        <div
-                          key={i}
-                          className="rounded flex items-center justify-center text-xs font-semibold overflow-hidden"
-                          style={{
-                            width: `${s.widthPct}%`,
-                            backgroundColor: s.compoundColor,
-                            color: s.textColor,
-                            minWidth: "2rem",
-                          }}
-                          title={`${s.compound} — Laps ${s.lapStart}–${s.lapEnd}`}
-                        >
-                          {s.compound.charAt(0)}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                      <span>Lap 1</span>
-                      {row.stints.map((s, i) => (
-                        <span key={i}>Lap {s.lapEnd}</span>
-                      ))}
-                    </div>
+                <div>
+                  <div className="flex gap-1 h-12">
+                    {row.stints.map((s, i) => (
+                      <div
+                        key={i}
+                        className="rounded flex items-center justify-center text-xs font-semibold overflow-hidden"
+                        style={{
+                          width: `${s.widthPct}%`,
+                          backgroundColor: s.compoundColor,
+                          color: s.textColor,
+                        }}
+                        title={`${s.compound} — Laps ${s.lapStart}–${s.lapEnd}`}
+                      >
+                        {s.widthPct >= MIN_STINT_LABEL_WIDTH_PCT ? s.compound.charAt(0) : null}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>Lap 1</span>
+                    {row.stints.map((s, i) => (
+                      <span key={i}>Lap {s.lapEnd}</span>
+                    ))}
                   </div>
                 </div>
               </div>
