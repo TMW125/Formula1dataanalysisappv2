@@ -13,9 +13,9 @@ interface StatsCardProps {
 
 export function StatsCard({ title, value, icon: Icon, trend, color = "#E10600" }: StatsCardProps) {
   return (
-    <div className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
+    <div className="bg-card border border-border rounded-lg p-4 sm:p-6 hover:border-primary/50 transition-colors">
       <div className="flex items-center justify-between mb-4">
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: color + "20" }}>
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: color + "20" }}>
           <Icon className="w-5 h-5" style={{ color }} />
         </div>
         {trend && (
@@ -29,7 +29,7 @@ export function StatsCard({ title, value, icon: Icon, trend, color = "#E10600" }
         )}
       </div>
       <p className="text-sm text-muted-foreground mb-1">{title}</p>
-      <p className="text-2xl font-bold text-card-foreground">{value}</p>
+      <p className="text-xl sm:text-2xl font-bold text-card-foreground break-words">{value}</p>
     </div>
   );
 }

@@ -11,7 +11,7 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
         <h3 className="text-card-foreground">Driver Leaderboard</h3>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[560px]">
           <thead>
             <tr className="bg-secondary border-b border-border">
               <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Pos</th>
@@ -26,7 +26,7 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
               <tr key={entry.position} className="hover:bg-secondary/50 transition-colors">
                 <td className="px-4 py-3">
                   <div
-                    className={`w-8 h-8 rounded flex items-center justify-center font-bold ${
+                    className={`w-8 h-8 rounded flex items-center justify-center text-sm font-bold ${
                       entry.position === 1
                         ? "bg-yellow-500/20 text-yellow-500"
                         : entry.position === 2
@@ -42,13 +42,13 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <div
-                      className="w-1 h-8 rounded-full"
+                      className="w-1 h-8 rounded-full shrink-0"
                       style={{ backgroundColor: entry.teamColor }}
                     ></div>
-                    <span className="text-card-foreground">{entry.driver}</span>
+                    <span className="text-card-foreground whitespace-nowrap">{entry.driver}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{entry.team}</td>
+                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{entry.team}</td>
                 <td className="px-4 py-3 text-card-foreground font-mono">{entry.time}</td>
                 <td className="px-4 py-3">
                   <span

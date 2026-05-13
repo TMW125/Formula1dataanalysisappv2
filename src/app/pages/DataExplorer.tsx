@@ -98,7 +98,7 @@ export function DataExplorer() {
 
   if (!sessionKey) {
     return (
-      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
+      <div className="p-4 sm:p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
         <Filter className="w-12 h-12 text-muted-foreground mb-4" />
         <h2 className="text-xl text-foreground mb-2">No Session Selected</h2>
         <p className="text-muted-foreground">Select a season, event, and session from the sidebar to explore raw data.</p>
@@ -107,23 +107,23 @@ export function DataExplorer() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl tracking-tight text-foreground mb-2">Raw Data Explorer</h1>
+        <h1 className="text-2xl sm:text-3xl tracking-tight text-foreground mb-1 sm:mb-2">Raw Data Explorer</h1>
         <p className="text-muted-foreground">Advanced data access and export tools</p>
       </div>
 
       {/* Controls */}
-      <div className="bg-card border border-border rounded-lg p-6">
+      <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
         <div className="flex flex-wrap gap-4 items-end">
           {/* Endpoint Selector */}
-          <div className="flex-1 min-w-[200px]">
+          <div className="w-full md:flex-1 md:min-w-[200px]">
             <label className="block text-sm text-muted-foreground mb-2">API Endpoint</label>
             <select
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value as ExplorerEndpoint)}
-              className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full h-11 bg-input text-foreground px-4 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
             >
               {ENDPOINTS.map((ep) => (
                 <option key={ep} value={ep}>
@@ -134,7 +134,7 @@ export function DataExplorer() {
           </div>
 
           {/* Driver Filter */}
-          <div className="flex-1 min-w-[200px]">
+          <div className="w-full md:flex-1 md:min-w-[200px]">
             <label className="block text-sm text-muted-foreground mb-2">
               Filter by Driver{NO_DRIVER_FILTER.has(endpoint) ? " (not applicable for this endpoint)" : ""}
             </label>
@@ -142,7 +142,7 @@ export function DataExplorer() {
               value={driverNumber ?? ""}
               onChange={(e) => setDriverNumber(e.target.value ? Number(e.target.value) : null)}
               disabled={NO_DRIVER_FILTER.has(endpoint)}
-              className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full h-11 bg-input text-foreground px-4 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <option value="">All Drivers</option>
               {sortedDrivers.map((driver) => (
@@ -155,10 +155,10 @@ export function DataExplorer() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3 mt-4">
+        <div className="flex flex-col sm:flex-row gap-3 mt-4">
           <button
             onClick={refetch}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+            className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 min-h-11 rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Filter className="w-4 h-4" />
             Apply Filters
@@ -166,7 +166,7 @@ export function DataExplorer() {
           <button
             onClick={handleExport}
             disabled={data.length === 0}
-            className="flex items-center gap-2 bg-secondary text-secondary-foreground px-4 py-2 rounded-lg hover:bg-secondary/80 transition-colors border border-border disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 bg-secondary text-secondary-foreground px-4 min-h-11 rounded-lg hover:bg-secondary/80 transition-colors border border-border disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="w-4 h-4" />
             Export to CSV
@@ -175,10 +175,10 @@ export function DataExplorer() {
       </div>
 
       {/* View Mode Toggle */}
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <button
           onClick={() => setViewMode("table")}
-          className={`px-4 py-2 rounded-lg transition-colors ${
+          className={`px-4 min-h-11 rounded-lg transition-colors ${
             viewMode === "table"
               ? "bg-primary text-primary-foreground"
               : "bg-card text-card-foreground border border-border hover:bg-secondary"
@@ -188,7 +188,7 @@ export function DataExplorer() {
         </button>
         <button
           onClick={() => setViewMode("json")}
-          className={`px-4 py-2 rounded-lg transition-colors ${
+          className={`px-4 min-h-11 rounded-lg transition-colors ${
             viewMode === "json"
               ? "bg-primary text-primary-foreground"
               : "bg-card text-card-foreground border border-border hover:bg-secondary"
@@ -222,12 +222,12 @@ export function DataExplorer() {
       {!loading && data.length > 0 && (
         viewMode === "table" ? (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <div className="p-4 border-b border-border flex items-center justify-between">
+            <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h3 className="text-card-foreground">Data Results</h3>
               <span className="text-sm text-muted-foreground">{data.length} records</span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[720px]">
                 <thead>
                   <tr className="bg-secondary border-b border-border">
                     {Object.keys(data[0]).map((key) => (
@@ -259,13 +259,13 @@ export function DataExplorer() {
           </div>
         ) : (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <div className="p-4 border-b border-border flex items-center justify-between">
+            <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h3 className="text-card-foreground">JSON Response</h3>
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(JSON.stringify(data, null, 2));
                 }}
-                className="text-sm text-primary hover:underline"
+                className="text-sm text-primary hover:underline text-left"
               >
                 Copy to clipboard
               </button>

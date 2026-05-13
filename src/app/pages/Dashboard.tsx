@@ -42,10 +42,10 @@ export function Dashboard() {
   const bestLap = useMemo(() => getBestLapFormatted(laps), [laps]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl tracking-tight text-foreground mb-2">Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl tracking-tight text-foreground mb-1 sm:mb-2">Dashboard</h1>
         <p className="text-muted-foreground">Overview of the current race weekend</p>
       </div>
 
@@ -62,7 +62,7 @@ export function Dashboard() {
       ) : (
         <>
           {/* Stats Cards + Track Map */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-stretch">
             {/* Stats column */}
             <div className="flex flex-col gap-6">
               <StatsCard title="Track" value={sessionInfo.track} icon={MapPin} color="#7C3AED" />
@@ -73,7 +73,7 @@ export function Dashboard() {
 
             {/* Track Map */}
             {circuitInfo && circuitInfo.x.length > 0 ? (
-              <div className="bg-card border border-border rounded-lg p-4 flex flex-col h-0 min-h-full overflow-hidden">
+              <div className="bg-card border border-border rounded-lg p-3 sm:p-4 flex flex-col h-0 min-h-full overflow-hidden">
                 <div className="flex-1 min-h-0">
                   <TrackMap x={circuitInfo.x} y={circuitInfo.y} className="w-full h-full" />
                 </div>

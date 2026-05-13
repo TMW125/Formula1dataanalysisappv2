@@ -103,10 +103,10 @@ export function DriverAnalysis() {
   const teamColor = selectedDriver ? toHexColor(selectedDriver.team_colour) : "#888";
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl tracking-tight text-foreground mb-2">Driver Analysis</h1>
+        <h1 className="text-2xl sm:text-3xl tracking-tight text-foreground mb-1 sm:mb-2">Driver Analysis</h1>
         <p className="text-muted-foreground">Detailed telemetry and performance analysis</p>
       </div>
 
@@ -119,8 +119,8 @@ export function DriverAnalysis() {
       ) : (
         <>
           {/* Driver and Lap Selector */}
-          <div className="flex gap-4 items-center">
-            <div>
+          <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
+            <div className="w-full sm:w-auto">
               <label className="block text-sm text-muted-foreground mb-2">Driver</label>
               <select
                 value={effectiveDriverNum ?? ""}
@@ -128,7 +128,7 @@ export function DriverAnalysis() {
                   setSelectedDriverNumber(Number(e.target.value));
                   setSelectedLap(1);
                 }}
-                className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary min-w-[200px]"
+                className="h-11 w-full sm:min-w-[240px] bg-input text-foreground px-4 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 {sortedDrivers.map((d) => (
                   <option key={d.driver_number} value={d.driver_number}>
@@ -138,12 +138,12 @@ export function DriverAnalysis() {
               </select>
             </div>
 
-            <div>
+            <div className="w-full sm:w-auto">
               <label className="block text-sm text-muted-foreground mb-2">Lap Number</label>
               <select
                 value={selectedLap}
                 onChange={(e) => setSelectedLap(Number(e.target.value))}
-                className="bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary min-w-[120px]"
+                className="h-11 w-full sm:min-w-[140px] bg-input text-foreground px-4 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
                 disabled={driverLaps.length === 0}
               >
                 {driverLaps.length > 0 ? (
@@ -161,18 +161,18 @@ export function DriverAnalysis() {
 
           {/* Driver Info Card */}
           {selectedDriver && (
-            <div className="bg-card border border-border rounded-lg p-6">
-              <div className="flex items-center gap-6">
+            <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
                 <div
-                  className="w-24 h-24 rounded-lg flex items-center justify-center text-4xl font-bold"
+                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg flex items-center justify-center text-3xl sm:text-4xl font-bold"
                   style={{ backgroundColor: teamColor + "20", color: teamColor }}
                 >
                   {selectedDriver.name_acronym}
                 </div>
-                <div className="flex-1">
-                  <h2 className="text-2xl text-card-foreground mb-1">{selectedDriver.full_name}</h2>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl sm:text-2xl text-card-foreground mb-1 break-words">{selectedDriver.full_name}</h2>
                   <p className="text-muted-foreground mb-2">{selectedDriver.team_name}</p>
-                  <div className="flex gap-4 mt-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-3">
                     <div>
                       <p className="text-xs text-muted-foreground">Car Number</p>
                       <p className="text-lg font-bold text-card-foreground">#{selectedDriver.driver_number}</p>
@@ -193,16 +193,16 @@ export function DriverAnalysis() {
 
           {/* Sector Times */}
           {sectorTimes.length > 0 && (
-            <div className="bg-card border border-border rounded-lg p-6">
+            <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
               <h3 className="mb-4 text-card-foreground flex items-center gap-2">
                 <Clock className="w-5 h-5" />
                 Sector Times — Lap {lapData?.lap_number}
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
                 {sectorTimes.map((sector) => (
-                  <div key={sector.sector} className="bg-secondary rounded-lg p-4">
+                  <div key={sector.sector} className="bg-secondary rounded-lg p-3 sm:p-4">
                     <p className="text-xs text-muted-foreground mb-1">Sector {sector.sector}</p>
-                    <p className="text-2xl font-mono text-card-foreground mb-1">{sector.time}</p>
+                    <p className="text-xl sm:text-2xl font-mono text-card-foreground mb-1">{sector.time}</p>
                     <p className="text-sm font-mono text-muted-foreground">{sector.diff}</p>
                   </div>
                 ))}
@@ -224,10 +224,10 @@ export function DriverAnalysis() {
                 title="Speed vs Sample"
                 yAxisLabel="Speed (km/h)"
                 xLabel="Sample"
-                height={220}
+                height={240}
               />
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "throttle", color: "#00D2BE", name: "Throttle %" }]}
@@ -235,7 +235,7 @@ export function DriverAnalysis() {
                   title="Throttle Application"
                   yAxisLabel="Throttle %"
                   xLabel="Sample"
-                  height={200}
+                  height={220}
                 />
                 <TelemetryChart
                   data={telemetrySampled}
@@ -244,11 +244,11 @@ export function DriverAnalysis() {
                   title="Brake Application"
                   yAxisLabel="Brake %"
                   xLabel="Sample"
-                  height={200}
+                  height={220}
                 />
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "gear", color: "#0090ff", name: "Gear" }]}
@@ -256,7 +256,7 @@ export function DriverAnalysis() {
                   title="Gear Selection"
                   yAxisLabel="Gear"
                   xLabel="Sample"
-                  height={200}
+                  height={220}
                 />
                 <TelemetryChart
                   data={telemetrySampled}
@@ -265,7 +265,7 @@ export function DriverAnalysis() {
                   title="Engine RPM"
                   yAxisLabel="RPM"
                   xLabel="Sample"
-                  height={200}
+                  height={220}
                 />
               </div>
             </div>
@@ -277,13 +277,13 @@ export function DriverAnalysis() {
 
           {/* Tire Compound History */}
           {driverStints.length > 0 && (
-            <div className="bg-card border border-border rounded-lg p-6">
+            <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
               <h3 className="mb-4 text-card-foreground">Tire Compound &amp; Stint History</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
                 {driverStints.map((stint, idx) => {
                   const compound = stint.compound as TireCompound;
                   return (
-                    <div key={idx} className="bg-secondary rounded-lg p-4">
+                    <div key={idx} className="bg-secondary rounded-lg p-3 sm:p-4">
                       <div className="flex items-center gap-3 mb-2">
                         <div
                           className="w-4 h-4 rounded-full"

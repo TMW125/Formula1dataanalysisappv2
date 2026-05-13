@@ -10,7 +10,7 @@ interface LapTimeChartProps {
 
 export function LapTimeChart({ data, lines, height = 300 }: LapTimeChartProps) {
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
+    <div className="bg-card border border-border rounded-lg p-3 sm:p-4">
       <h3 className="mb-4 text-card-foreground">Lap Times Comparison</h3>
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data}>
@@ -18,12 +18,12 @@ export function LapTimeChart({ data, lines, height = 300 }: LapTimeChartProps) {
           <XAxis
             dataKey="lap"
             stroke="#9ca3af"
-            tick={{ fill: "#9ca3af", fontSize: 12 }}
+            tick={{ fill: "#9ca3af", fontSize: 10 }}
             label={{ value: "Lap", position: "insideBottom", offset: -5, fill: "#9ca3af" }}
           />
           <YAxis
             stroke="#9ca3af"
-            tick={{ fill: "#9ca3af", fontSize: 12 }}
+            tick={{ fill: "#9ca3af", fontSize: 10 }}
             label={{ value: "Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
             domain={["dataMin - 1", "dataMax + 1"]}
           />

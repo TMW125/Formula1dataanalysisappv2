@@ -82,7 +82,7 @@ export function RaceStrategy() {
 
   if (!sessionKey) {
     return (
-      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
+      <div className="p-4 sm:p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
         <Flag className="w-12 h-12 text-muted-foreground mb-4" />
         <h2 className="text-xl text-foreground mb-2">No Session Selected</h2>
         <p className="text-muted-foreground">Select a season, event, and session from the sidebar to view race strategy.</p>
@@ -93,48 +93,48 @@ export function RaceStrategy() {
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl tracking-tight text-foreground mb-2">Race Strategy</h1>
+        <h1 className="text-2xl sm:text-3xl tracking-tight text-foreground mb-1 sm:mb-2">Race Strategy</h1>
         <p className="text-muted-foreground">Analyze race pace and tire strategy</p>
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-card border border-border rounded-lg p-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+        <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
               <Flag className="w-5 h-5 text-primary" />
             </div>
             <h3 className="text-card-foreground">Total Laps</h3>
           </div>
-          <p className="text-3xl font-bold text-card-foreground">{totalLaps || "—"}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-card-foreground">{totalLaps || "—"}</p>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
               <Clock className="w-5 h-5 text-primary" />
             </div>
             <h3 className="text-card-foreground">Avg Pit Stop</h3>
           </div>
-          <p className="text-3xl font-bold text-card-foreground font-mono">{avgPitDuration}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-card-foreground font-mono">{avgPitDuration}</p>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
               <TrendingDown className="w-5 h-5 text-primary" />
             </div>
             <h3 className="text-card-foreground">Fastest Lap</h3>
           </div>
-          <p className="text-3xl font-bold text-card-foreground font-mono">{fastestLap}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-card-foreground font-mono">{fastestLap}</p>
         </div>
       </div>
 
       {/* Stint Timeline Visualization */}
-      <div className="bg-card border border-border rounded-lg p-6">
+      <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
         <h3 className="mb-6 text-card-foreground">Stint Timeline Visualization</h3>
         {stintTimeline.length === 0 ? (
           <p className="text-muted-foreground text-sm">No stint data available for this session.</p>
@@ -145,28 +145,32 @@ export function RaceStrategy() {
                 <p className="text-sm text-muted-foreground mb-2" style={{ color: row.color }}>
                   {row.driverName}
                 </p>
-                <div className="flex gap-1 h-12">
-                  {row.stints.map((s, i) => (
-                    <div
-                      key={i}
-                      className="rounded flex items-center justify-center text-xs font-semibold overflow-hidden"
-                      style={{
-                        width: `${s.widthPct}%`,
-                        backgroundColor: s.compoundColor,
-                        color: s.textColor,
-                        minWidth: "2rem",
-                      }}
-                      title={`${s.compound} — Laps ${s.lapStart}–${s.lapEnd}`}
-                    >
-                      {s.compound.charAt(0)}
+                <div className="overflow-x-auto">
+                  <div className="min-w-[520px]">
+                    <div className="flex gap-1 h-12">
+                      {row.stints.map((s, i) => (
+                        <div
+                          key={i}
+                          className="rounded flex items-center justify-center text-xs font-semibold overflow-hidden"
+                          style={{
+                            width: `${s.widthPct}%`,
+                            backgroundColor: s.compoundColor,
+                            color: s.textColor,
+                            minWidth: "2rem",
+                          }}
+                          title={`${s.compound} — Laps ${s.lapStart}–${s.lapEnd}`}
+                        >
+                          {s.compound.charAt(0)}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>Lap 1</span>
-                  {row.stints.map((s, i) => (
-                    <span key={i}>Lap {s.lapEnd}</span>
-                  ))}
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                      <span>Lap 1</span>
+                      {row.stints.map((s, i) => (
+                        <span key={i}>Lap {s.lapEnd}</span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -175,7 +179,7 @@ export function RaceStrategy() {
       </div>
 
       {/* Lap Times per Stint */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-3 sm:p-4">
         <h3 className="mb-4 text-card-foreground">Lap Times Throughout Race</h3>
         {lapScatterSeries.length === 0 ? (
           <p className="text-muted-foreground text-sm">No lap data available.</p>
@@ -187,13 +191,13 @@ export function RaceStrategy() {
                 dataKey="lap"
                 type="number"
                 stroke="#9ca3af"
-                tick={{ fill: "#9ca3af", fontSize: 12 }}
+                tick={{ fill: "#9ca3af", fontSize: 10 }}
                 label={{ value: "Lap", position: "insideBottom", offset: -5, fill: "#9ca3af" }}
               />
               <YAxis
                 dataKey="time"
                 stroke="#9ca3af"
-                tick={{ fill: "#9ca3af", fontSize: 12 }}
+                tick={{ fill: "#9ca3af", fontSize: 10 }}
                 label={{ value: "Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
               />
               <Tooltip
@@ -215,13 +219,13 @@ export function RaceStrategy() {
       </div>
 
       {/* Average Pace Comparison */}
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-3 sm:p-4">
         <h3 className="mb-4 text-card-foreground">Average Pace by Stint</h3>
         {paceData.length === 0 ? (
           <p className="text-muted-foreground text-sm">No pace data available.</p>
         ) : (
           <Tabs defaultValue="SOFT" className="w-full">
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 w-full flex-wrap h-auto gap-2">
               <TabsTrigger value="SOFT">Soft</TabsTrigger>
               <TabsTrigger value="MEDIUM">Medium</TabsTrigger>
               <TabsTrigger value="HARD">Hard</TabsTrigger>
@@ -240,7 +244,7 @@ export function RaceStrategy() {
                         <XAxis
                           dataKey="stint"
                           stroke="#9ca3af"
-                          tick={{ fill: "#9ca3af", fontSize: 10 }}
+                          tick={{ fill: "#9ca3af", fontSize: 9 }}
                           interval={0}
                           angle={-25}
                           textAnchor="end"
@@ -248,7 +252,7 @@ export function RaceStrategy() {
                         />
                         <YAxis
                           stroke="#9ca3af"
-                          tick={{ fill: "#9ca3af", fontSize: 12 }}
+                          tick={{ fill: "#9ca3af", fontSize: 10 }}
                           label={{ value: "Avg Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
                         />
                         <Tooltip
@@ -285,7 +289,7 @@ export function RaceStrategy() {
           <p className="text-muted-foreground text-sm p-4">No pit stop data available.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[620px]">
               <thead>
                 <tr className="bg-secondary border-b border-border">
                   <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Driver</th>

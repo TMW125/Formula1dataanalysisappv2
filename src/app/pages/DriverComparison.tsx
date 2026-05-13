@@ -147,10 +147,10 @@ export function DriverComparison() {
   const carLoading = carALoading || carBLoading;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl tracking-tight text-foreground mb-2">Driver Comparison</h1>
+        <h1 className="text-2xl sm:text-3xl tracking-tight text-foreground mb-1 sm:mb-2">Driver Comparison</h1>
         <p className="text-muted-foreground">Compare two drivers across a session</p>
       </div>
 
@@ -169,7 +169,7 @@ export function DriverComparison() {
               <select
                 value={effectiveA ?? ""}
                 onChange={(e) => setDriverANum(Number(e.target.value))}
-                className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full h-11 bg-input text-foreground px-4 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 {sortedDrivers.map((d) => (
                   <option key={d.driver_number} value={d.driver_number}>
@@ -190,7 +190,7 @@ export function DriverComparison() {
               <select
                 value={effectiveB ?? ""}
                 onChange={(e) => setDriverBNum(Number(e.target.value))}
-                className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full h-11 bg-input text-foreground px-4 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 {sortedDrivers.map((d) => (
                   <option key={d.driver_number} value={d.driver_number}>
@@ -202,26 +202,26 @@ export function DriverComparison() {
           </div>
 
           {/* Driver Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {[{ driver: driverA, bestLap: bestLapA, color: colorA }, { driver: driverB, bestLap: bestLapB, color: colorB }].map(
               ({ driver, bestLap, color }, idx) =>
                 driver ? (
-                  <div key={idx} className="bg-card border border-border rounded-lg p-6">
-                    <div className="flex items-center gap-4">
+                  <div key={idx} className="bg-card border border-border rounded-lg p-4 sm:p-6">
+                    <div className="flex items-center gap-3 sm:gap-4">
                       <div
-                        className="w-20 h-20 rounded-lg flex items-center justify-center text-3xl font-bold"
+                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg flex items-center justify-center text-2xl sm:text-3xl font-bold shrink-0"
                         style={{ backgroundColor: color + "20", color }}
                       >
                         {driver.name_acronym}
                       </div>
-                      <div>
-                        <h3 className="text-xl text-card-foreground mb-1">{driver.full_name}</h3>
+                      <div className="min-w-0">
+                        <h3 className="text-lg sm:text-xl text-card-foreground mb-1 break-words">{driver.full_name}</h3>
                         <p className="text-sm text-muted-foreground">{driver.team_name}</p>
                         <p className="text-xs text-muted-foreground mt-1">#{driver.driver_number}</p>
                       </div>
                     </div>
                     <div className="mt-4 pt-4 border-t border-border">
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center gap-3">
                         <span className="text-sm text-muted-foreground">Best Lap</span>
                         <span className="text-lg font-mono text-card-foreground">{bestLap}</span>
                       </div>
@@ -272,11 +272,11 @@ export function DriverComparison() {
           ) : null}
 
           {/* Sector Comparison */}
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
             <h3 className="mb-4 text-card-foreground">Best Lap — Sector Comparison</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
               {sectorDiffs.map(({ sector, timeA, timeB, diff }) => (
-                <div key={sector} className="bg-secondary rounded-lg p-4 text-center">
+                <div key={sector} className="bg-secondary rounded-lg p-3 sm:p-4 text-center">
                   <p className="text-xs text-muted-foreground mb-2">Sector {sector}</p>
                   <div className="flex justify-between text-xs text-muted-foreground mb-2">
                     <span style={{ color: colorA }}>{timeA != null ? `${timeA.toFixed(3)}s` : "—"}</span>
