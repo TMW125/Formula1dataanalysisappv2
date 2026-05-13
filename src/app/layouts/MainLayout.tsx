@@ -6,6 +6,8 @@ import { useF1Data, useMeetings, useSessions } from "../context/F1DataContext";
 /** Seasons available in the selector — extend as new seasons are released. */
 const AVAILABLE_SEASONS = ["2026", "2025", "2024", "2023", "2022", "2021", "2020"];
 const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
+const getIsDesktopViewport = () =>
+  typeof window !== "undefined" ? window.matchMedia(DESKTOP_MEDIA_QUERY).matches : false;
 
 export function MainLayout() {
   const location = useLocation();
@@ -13,9 +15,7 @@ export function MainLayout() {
   const { meetings, loading: meetingsLoading } = useMeetings();
   const { sessions, loading: sessionsLoading } = useSessions();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia(DESKTOP_MEDIA_QUERY).matches : false
-  );
+  const [isDesktop, setIsDesktop] = useState(getIsDesktopViewport);
   const firstNavItemRef = useRef<HTMLAnchorElement | null>(null);
 
   const navItems = [
@@ -42,7 +42,7 @@ export function MainLayout() {
       }
     };
 
-    setIsDesktop(mediaQueryList.matches);
+    setIsDesktop(getIsDesktopViewport());
     mediaQueryList.addEventListener("change", handleMediaChange);
     return () => mediaQueryList.removeEventListener("change", handleMediaChange);
   }, []);
@@ -134,9 +134,7 @@ export function MainLayout() {
           aria-label="Close sidebar overlay"
           className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[1px] lg:hidden"
           onClick={closeSidebar}
-        >
-          <span className="sr-only">Close sidebar overlay</span>
-        </button>
+        />
       )}
 
       <aside
