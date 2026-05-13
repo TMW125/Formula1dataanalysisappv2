@@ -73,13 +73,13 @@ export function Dashboard() {
 
             {/* Track Map */}
             {circuitInfo && circuitInfo.x.length > 0 ? (
-              <div className="bg-card border border-border rounded-lg p-3 sm:p-4 flex flex-col h-0 min-h-full overflow-hidden">
+              <div className="bg-card border border-border rounded-lg p-3 sm:p-4 flex flex-col min-h-[260px] lg:h-0 lg:min-h-full overflow-hidden">
                 <div className="flex-1 min-h-0">
                   <TrackMap x={circuitInfo.x} y={circuitInfo.y} className="w-full h-full" />
                 </div>
               </div>
             ) : (
-              <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-center text-muted-foreground text-sm h-0 min-h-full">
+              <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-center text-muted-foreground text-sm min-h-[260px] lg:h-0 lg:min-h-full">
                 Track map unavailable
               </div>
             )}
