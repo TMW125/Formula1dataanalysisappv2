@@ -1,14 +1,20 @@
+import { useMemo } from "react";
 import type { LeaderboardRow } from "../types/ui";
 
 interface LeaderboardTableProps {
   data: LeaderboardRow[];
 }
 
+function getDriverSurname(driverName: string) {
+  const parts = driverName.trim().split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1] : driverName;
+}
+
 export function LeaderboardTable({ data }: LeaderboardTableProps) {
-  const getDriverSurname = (driverName: string) => {
-    const parts = driverName.trim().split(/\s+/);
-    return parts.length > 1 ? parts[parts.length - 1] : driverName;
-  };
+  const rows = useMemo(
+    () => data.map((entry) => ({ ...entry, driverSurname: getDriverSurname(entry.driver) })),
+    [data]
+  );
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -27,7 +33,7 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {data.map((entry) => (
+            {rows.map((entry) => (
               <tr key={entry.position} className="hover:bg-secondary/50 transition-colors">
                 <td className="px-2 py-3 sm:px-4">
                   <div
@@ -51,7 +57,7 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
                       style={{ backgroundColor: entry.teamColor }}
                     ></div>
                     <span className="hidden sm:inline text-card-foreground whitespace-nowrap">{entry.driver}</span>
-                    <span className="sm:hidden text-card-foreground whitespace-nowrap">{getDriverSurname(entry.driver)}</span>
+                    <span className="sm:hidden text-card-foreground whitespace-nowrap">{entry.driverSurname}</span>
                   </div>
                 </td>
                 <td className="hidden sm:table-cell px-4 py-3 text-muted-foreground whitespace-nowrap">{entry.team}</td>
