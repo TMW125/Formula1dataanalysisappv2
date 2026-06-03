@@ -158,7 +158,7 @@ export function MainLayout() {
 
       <div className="flex min-h-screen flex-col lg:pl-64">
         {/* Top Bar */}
-        <header className="bg-card border-b border-border px-4 sm:px-6 py-3 sm:py-4">
+        <header className="sticky top-0 z-30 bg-card border-b border-border px-4 sm:px-6 py-3 sm:py-4 lg:static">
           <div className="flex w-full flex-wrap items-center gap-3 sm:gap-4">
             <button
               type="button"
