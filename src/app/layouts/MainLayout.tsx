@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from "react-router";
-import { LayoutDashboard, Activity, GitCompare, TrendingUp, Database, ChevronRight, Search } from "lucide-react";
+import { LayoutDashboard, Activity, GitCompare, TrendingUp, Database, ChevronRight } from "lucide-react";
 import { useF1Data, useMeetings, useSessions } from "../context/F1DataContext";
 
 /** Seasons available in the selector — extend as new seasons are released. */
@@ -131,18 +131,6 @@ export function MainLayout() {
               </option>
             ))}
           </select>
-
-          {/* Search */}
-          <div className="flex-1 max-w-md ml-auto">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search driver..."
-                className="w-full bg-input text-foreground pl-10 pr-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
         </header>
 
         {/* Page Content */}
