@@ -8,10 +8,11 @@ interface TelemetryChartProps {
   yAxisLabel?: string;
   /** Override the x-axis label. Defaults to "Distance (m)". */
   xLabel?: string;
+  xTicks?: number[];
   height?: number;
 }
 
-export function TelemetryChart({ data, dataKeys, xKey, title, yAxisLabel, xLabel = "Distance (m)", height = 200 }: TelemetryChartProps) {
+export function TelemetryChart({ data, dataKeys, xKey, title, yAxisLabel, xLabel = "Distance (m)", xTicks, height = 200 }: TelemetryChartProps) {
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <h3 className="mb-4 text-card-foreground">{title}</h3>
@@ -20,6 +21,7 @@ export function TelemetryChart({ data, dataKeys, xKey, title, yAxisLabel, xLabel
           <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
           <XAxis
             dataKey={xKey}
+            ticks={xTicks}
             stroke="#9ca3af"
             tick={{ fill: "#9ca3af", fontSize: 12 }}
             label={{ value: xLabel, position: "insideBottom", offset: -5, fill: "#9ca3af" }}

@@ -90,6 +90,15 @@ export function DriverAnalysis() {
     return telemetry.filter((_, i) => i % step === 0);
   }, [telemetry]);
 
+  const telemetryTimeTicks = useMemo(() => {
+    if (telemetrySampled.length === 0) return [];
+    const maxTime = Math.max(...telemetrySampled.map((pt) => pt.time));
+    const upperBound = Math.ceil(maxTime / 5) * 5;
+    const ticks: number[] = [];
+    for (let t = 0; t <= upperBound; t += 5) ticks.push(t);
+    return ticks;
+  }, [telemetrySampled]);
+
   // Tire stints for this driver
   const driverStints = useMemo(
     () =>
@@ -224,6 +233,7 @@ export function DriverAnalysis() {
                 title="Speed vs Time"
                 yAxisLabel="Speed (km/h)"
                 xLabel="Time (s)"
+                xTicks={telemetryTimeTicks}
                 height={220}
               />
 
@@ -235,6 +245,7 @@ export function DriverAnalysis() {
                   title="Throttle Application"
                   yAxisLabel="Throttle %"
                   xLabel="Time (s)"
+                  xTicks={telemetryTimeTicks}
                   height={200}
                 />
                 <TelemetryChart
@@ -244,6 +255,7 @@ export function DriverAnalysis() {
                   title="Brake Application"
                   yAxisLabel="Brake %"
                   xLabel="Time (s)"
+                  xTicks={telemetryTimeTicks}
                   height={200}
                 />
               </div>
@@ -256,6 +268,7 @@ export function DriverAnalysis() {
                   title="Gear Selection"
                   yAxisLabel="Gear"
                   xLabel="Time (s)"
+                  xTicks={telemetryTimeTicks}
                   height={200}
                 />
                 <TelemetryChart
@@ -265,6 +278,7 @@ export function DriverAnalysis() {
                   title="Engine RPM"
                   yAxisLabel="RPM"
                   xLabel="Time (s)"
+                  xTicks={telemetryTimeTicks}
                   height={200}
                 />
               </div>
