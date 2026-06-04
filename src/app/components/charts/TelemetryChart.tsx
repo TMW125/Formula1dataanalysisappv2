@@ -10,6 +10,7 @@ interface TelemetryChartProps {
   xLabel?: string;
   /** Optional Recharts sync id for cross-chart tooltip/brush synchronization. */
   syncId?: string;
+  xTicks?: number[];
   height?: number;
 }
 
@@ -21,6 +22,7 @@ export function TelemetryChart({
   yAxisLabel,
   xLabel = "Distance (m)",
   syncId,
+  xTicks,
   height = 200,
 }: TelemetryChartProps) {
   return (
@@ -31,6 +33,14 @@ export function TelemetryChart({
           <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
           <XAxis
             dataKey={xKey}
+            type="number"
+            ticks={xTicks}
+            domain={
+              xTicks && xTicks.length > 1
+                ? [xTicks[0], xTicks[xTicks.length - 1]]
+                : ["dataMin", "dataMax"]
+            }
+            allowDecimals
             stroke="#9ca3af"
             tick={{ fill: "#9ca3af", fontSize: 12 }}
             label={{ value: xLabel, position: "insideBottom", offset: -5, fill: "#9ca3af" }}

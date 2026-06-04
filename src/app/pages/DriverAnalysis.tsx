@@ -91,6 +91,31 @@ export function DriverAnalysis() {
     return telemetry.filter((_, i) => i % step === 0);
   }, [telemetry]);
 
+  const telemetryTimeTicks = useMemo(() => {
+    if (telemetrySampled.length === 0) return [];
+    const times = telemetrySampled.map((pt) => pt.time).filter((time) => Number.isFinite(time));
+    if (times.length === 0) return [];
+    const minTime = Math.min(...times);
+    const maxTime = Math.max(...times);
+    if (minTime === maxTime) return [Number(minTime.toFixed(3))];
+
+    const range = maxTime - minTime;
+    const rawStep = range / 5;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const normalized = rawStep / magnitude;
+    const niceStepMultiplier =
+      normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+    const tickStep = niceStepMultiplier * magnitude;
+    const decimalPlaces = tickStep < 1 ? Math.min(6, Math.ceil(-Math.log10(tickStep))) : 0;
+    const ticks: number[] = [Number(minTime.toFixed(decimalPlaces + 1))];
+    const firstInteriorTick = Math.ceil(minTime / tickStep) * tickStep;
+    for (let t = firstInteriorTick; t < maxTime; t += tickStep) {
+      ticks.push(Number(t.toFixed(decimalPlaces)));
+    }
+    ticks.push(Number(maxTime.toFixed(decimalPlaces + 1)));
+    return [...new Set(ticks)].sort((a, b) => a - b);
+  }, [telemetrySampled]);
+
   // Tire stints for this driver
   const driverStints = useMemo(
     () =>
@@ -221,11 +246,12 @@ export function DriverAnalysis() {
               <TelemetryChart
                 data={telemetrySampled}
                 dataKeys={[{ key: "speed", color: teamColor, name: "Speed (km/h)" }]}
-                xKey="distance"
+                xKey="time"
                 syncId={telemetrySyncId}
-                title="Speed vs Sample"
+                title="Speed vs Time"
                 yAxisLabel="Speed (km/h)"
-                xLabel="Sample"
+                xLabel="Time (s)"
+                xTicks={telemetryTimeTicks}
                 height={220}
               />
 
@@ -233,21 +259,23 @@ export function DriverAnalysis() {
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "throttle", color: "#00D2BE", name: "Throttle %" }]}
-                  xKey="distance"
+                  xKey="time"
                   syncId={telemetrySyncId}
                   title="Throttle Application"
                   yAxisLabel="Throttle %"
-                  xLabel="Sample"
+                  xLabel="Time (s)"
+                  xTicks={telemetryTimeTicks}
                   height={200}
                 />
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "brake", color: "#ff0050", name: "Brake %" }]}
-                  xKey="distance"
+                  xKey="time"
                   syncId={telemetrySyncId}
                   title="Brake Application"
                   yAxisLabel="Brake %"
-                  xLabel="Sample"
+                  xLabel="Time (s)"
+                  xTicks={telemetryTimeTicks}
                   height={200}
                 />
               </div>
@@ -256,21 +284,23 @@ export function DriverAnalysis() {
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "gear", color: "#0090ff", name: "Gear" }]}
-                  xKey="distance"
+                  xKey="time"
                   syncId={telemetrySyncId}
                   title="Gear Selection"
                   yAxisLabel="Gear"
-                  xLabel="Sample"
+                  xLabel="Time (s)"
+                  xTicks={telemetryTimeTicks}
                   height={200}
                 />
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "rpm", color: "#ff8800", name: "RPM" }]}
-                  xKey="distance"
+                  xKey="time"
                   syncId={telemetrySyncId}
                   title="Engine RPM"
                   yAxisLabel="RPM"
-                  xLabel="Sample"
+                  xLabel="Time (s)"
+                  xTicks={telemetryTimeTicks}
                   height={200}
                 />
               </div>
