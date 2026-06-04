@@ -92,10 +92,26 @@ export function DriverAnalysis() {
 
   const telemetryTimeTicks = useMemo(() => {
     if (telemetrySampled.length === 0) return [];
-    const maxTime = Math.max(...telemetrySampled.map((pt) => pt.time));
-    const upperBound = Math.ceil(maxTime / 5) * 5;
+    const times = telemetrySampled.map((pt) => pt.time).filter((time) => Number.isFinite(time));
+    if (times.length === 0) return [];
+    const minTime = Math.min(...times);
+    const maxTime = Math.max(...times);
+    if (minTime === maxTime) return [Number(minTime.toFixed(3))];
+
+    const range = maxTime - minTime;
+    const rawStep = range / 5;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const normalized = rawStep / magnitude;
+    const niceStepMultiplier =
+      normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+    const tickStep = niceStepMultiplier * magnitude;
+    const decimalPlaces = tickStep < 1 ? Math.min(6, Math.ceil(-Math.log10(tickStep))) : 0;
+    const lowerBound = Math.floor(minTime / tickStep) * tickStep;
+    const upperBound = Math.ceil(maxTime / tickStep) * tickStep;
     const ticks: number[] = [];
-    for (let t = 0; t <= upperBound; t += 5) ticks.push(t);
+    for (let t = lowerBound; t <= upperBound + tickStep * 0.5; t += tickStep) {
+      ticks.push(Number(t.toFixed(decimalPlaces)));
+    }
     return ticks;
   }, [telemetrySampled]);
 
