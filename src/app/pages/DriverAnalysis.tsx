@@ -28,6 +28,7 @@ function NoSessionBanner() {
 
 export function DriverAnalysis() {
   const sessionKey = useSelectedSessionKey();
+  const telemetrySyncId = "driver-analysis-telemetry";
 
   const { data: drivers, loading: driversLoading } = useDriversData();
   const { data: laps, loading: lapsLoading } = useLapsData();
@@ -246,6 +247,7 @@ export function DriverAnalysis() {
                 data={telemetrySampled}
                 dataKeys={[{ key: "speed", color: teamColor, name: "Speed (km/h)" }]}
                 xKey="time"
+                syncId={telemetrySyncId}
                 title="Speed vs Time"
                 yAxisLabel="Speed (km/h)"
                 xLabel="Time (s)"
@@ -258,6 +260,7 @@ export function DriverAnalysis() {
                   data={telemetrySampled}
                   dataKeys={[{ key: "throttle", color: "#00D2BE", name: "Throttle %" }]}
                   xKey="time"
+                  syncId={telemetrySyncId}
                   title="Throttle Application"
                   yAxisLabel="Throttle %"
                   xLabel="Time (s)"
@@ -268,6 +271,7 @@ export function DriverAnalysis() {
                   data={telemetrySampled}
                   dataKeys={[{ key: "brake", color: "#ff0050", name: "Brake %" }]}
                   xKey="time"
+                  syncId={telemetrySyncId}
                   title="Brake Application"
                   yAxisLabel="Brake %"
                   xLabel="Time (s)"
@@ -281,6 +285,7 @@ export function DriverAnalysis() {
                   data={telemetrySampled}
                   dataKeys={[{ key: "gear", color: "#0090ff", name: "Gear" }]}
                   xKey="time"
+                  syncId={telemetrySyncId}
                   title="Gear Selection"
                   yAxisLabel="Gear"
                   xLabel="Time (s)"
@@ -291,6 +296,7 @@ export function DriverAnalysis() {
                   data={telemetrySampled}
                   dataKeys={[{ key: "rpm", color: "#ff8800", name: "RPM" }]}
                   xKey="time"
+                  syncId={telemetrySyncId}
                   title="Engine RPM"
                   yAxisLabel="RPM"
                   xLabel="Time (s)"
