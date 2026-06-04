@@ -220,10 +220,10 @@ export function DriverAnalysis() {
               <TelemetryChart
                 data={telemetrySampled}
                 dataKeys={[{ key: "speed", color: teamColor, name: "Speed (km/h)" }]}
-                xKey="distance"
-                title="Speed vs Sample"
+                xKey="time"
+                title="Speed vs Time"
                 yAxisLabel="Speed (km/h)"
-                xLabel="Sample"
+                xLabel="Time (s)"
                 height={220}
               />
 
@@ -231,19 +231,19 @@ export function DriverAnalysis() {
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "throttle", color: "#00D2BE", name: "Throttle %" }]}
-                  xKey="distance"
+                  xKey="time"
                   title="Throttle Application"
                   yAxisLabel="Throttle %"
-                  xLabel="Sample"
+                  xLabel="Time (s)"
                   height={200}
                 />
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "brake", color: "#ff0050", name: "Brake %" }]}
-                  xKey="distance"
+                  xKey="time"
                   title="Brake Application"
                   yAxisLabel="Brake %"
-                  xLabel="Sample"
+                  xLabel="Time (s)"
                   height={200}
                 />
               </div>
@@ -252,19 +252,19 @@ export function DriverAnalysis() {
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "gear", color: "#0090ff", name: "Gear" }]}
-                  xKey="distance"
+                  xKey="time"
                   title="Gear Selection"
                   yAxisLabel="Gear"
-                  xLabel="Sample"
+                  xLabel="Time (s)"
                   height={200}
                 />
                 <TelemetryChart
                   data={telemetrySampled}
                   dataKeys={[{ key: "rpm", color: "#ff8800", name: "RPM" }]}
-                  xKey="distance"
+                  xKey="time"
                   title="Engine RPM"
                   yAxisLabel="RPM"
-                  xLabel="Sample"
+                  xLabel="Time (s)"
                   height={200}
                 />
               </div>

@@ -195,8 +195,9 @@ export function buildLapTimeChartData(
 // ─── Car telemetry ────────────────────────────────────────────────────────────
 
 /**
- * Convert CarData[] to the telemetry chart data format (sample-indexed).
- * The `distance` field is a sequential index (× 10 for cosmetic spacing).
+ * Convert CarData[] to the telemetry chart data format.
+ * The `time` field is elapsed seconds from the first included sample.
+ * The `distance` field is kept as a sequential index for existing consumers.
  *
  * When `lap` is supplied (and has a valid `date_start` + `lap_duration`), only
  * samples that fall within that lap's time window are included.
@@ -205,6 +206,7 @@ export function buildCarTelemetry(
   carData: CarData[],
   lap?: Lap | null
 ): Array<{
+  time: number;
   distance: number;
   speed: number;
   throttle: number;
@@ -221,7 +223,9 @@ export function buildCarTelemetry(
       return t >= lapStart && t < lapEnd;
     });
   }
+  const firstTimestamp = filtered.length > 0 ? new Date(filtered[0].date).getTime() : 0;
   return filtered.map((pt, idx) => ({
+    time: (new Date(pt.date).getTime() - firstTimestamp) / 1000,
     distance: idx * 10,
     speed: pt.speed,
     throttle: pt.throttle,
