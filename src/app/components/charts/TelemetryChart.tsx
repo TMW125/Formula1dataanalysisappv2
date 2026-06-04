@@ -8,15 +8,26 @@ interface TelemetryChartProps {
   yAxisLabel?: string;
   /** Override the x-axis label. Defaults to "Distance (m)". */
   xLabel?: string;
+  /** Optional Recharts sync id for cross-chart tooltip/brush synchronization. */
+  syncId?: string;
   height?: number;
 }
 
-export function TelemetryChart({ data, dataKeys, xKey, title, yAxisLabel, xLabel = "Distance (m)", height = 200 }: TelemetryChartProps) {
+export function TelemetryChart({
+  data,
+  dataKeys,
+  xKey,
+  title,
+  yAxisLabel,
+  xLabel = "Distance (m)",
+  syncId,
+  height = 200,
+}: TelemetryChartProps) {
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <h3 className="mb-4 text-card-foreground">{title}</h3>
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={data}>
+        <LineChart data={data} syncId={syncId}>
           <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
           <XAxis
             dataKey={xKey}
