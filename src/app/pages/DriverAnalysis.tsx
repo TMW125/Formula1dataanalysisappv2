@@ -106,13 +106,13 @@ export function DriverAnalysis() {
       normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
     const tickStep = niceStepMultiplier * magnitude;
     const decimalPlaces = tickStep < 1 ? Math.min(6, Math.ceil(-Math.log10(tickStep))) : 0;
-    const lowerBound = Math.floor(minTime / tickStep) * tickStep;
-    const upperBound = Math.ceil(maxTime / tickStep) * tickStep;
-    const ticks: number[] = [];
-    for (let t = lowerBound; t <= upperBound + tickStep * 0.5; t += tickStep) {
+    const ticks: number[] = [Number(minTime.toFixed(decimalPlaces + 1))];
+    const firstInteriorTick = Math.ceil(minTime / tickStep) * tickStep;
+    for (let t = firstInteriorTick; t < maxTime; t += tickStep) {
       ticks.push(Number(t.toFixed(decimalPlaces)));
     }
-    return ticks;
+    ticks.push(Number(maxTime.toFixed(decimalPlaces + 1)));
+    return [...new Set(ticks)].sort((a, b) => a - b);
   }, [telemetrySampled]);
 
   // Tire stints for this driver
