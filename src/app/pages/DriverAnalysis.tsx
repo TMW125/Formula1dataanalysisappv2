@@ -9,9 +9,8 @@ import {
   useStintsData,
 } from "../hooks/useSessionData";
 import { useSelectedSessionKey } from "../context/F1DataContext";
-import { buildCarTelemetry, capitalize, formatLapTime, toHexColor } from "../utils/transformers";
+import { buildCarTelemetry, capitalize, formatLapTime, toHexColor, toTireCompound } from "../utils/transformers";
 import { TIRE_COLORS } from "../types/ui";
-import type { TireCompound } from "../types/ui";
 import { Clock, TrendingUp } from "lucide-react";
 
 function NoSessionBanner() {
@@ -317,7 +316,7 @@ export function DriverAnalysis() {
               <h3 className="mb-4 text-card-foreground">Tire Compound &amp; Stint History</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {driverStints.map((stint, idx) => {
-                  const compound = stint.compound as TireCompound;
+                  const compound = toTireCompound(stint.compound);
                   return (
                     <div key={idx} className="bg-secondary rounded-lg p-4">
                       <div className="flex items-center gap-3 mb-2">

@@ -39,6 +39,13 @@ export function capitalize(s: string | null | undefined): string {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
+/** Convert an API compound value into the non-null value expected by the UI. */
+export function toTireCompound(value: string | null | undefined): TireCompound {
+  return Object.prototype.hasOwnProperty.call(TIRE_COLORS, value ?? "")
+    ? (value as TireCompound)
+    : "UNKNOWN";
+}
+
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
 
 /**
@@ -286,7 +293,7 @@ export function buildStintTimeline(
       driverNumber: driverNum,
       color: toHexColor(d?.team_colour),
       stints: sorted.map((s) => {
-        const compound = s.compound as TireCompound;
+        const compound = toTireCompound(s.compound);
         const lapEnd = s.lap_end ?? s.lap_start;
         return {
           compound,
@@ -331,7 +338,7 @@ export function buildPitStops(
       const compound = nextStint
         ? capitalize(nextStint.compound)
         : "Unknown";
-      const compoundKey = (nextStint?.compound ?? "UNKNOWN") as TireCompound;
+      const compoundKey = toTireCompound(nextStint?.compound);
 
       return {
         driver: d?.full_name ?? `#${pit.driver_number}`,
@@ -359,9 +366,6 @@ export function buildPaceData(
   stints: Stint[],
   drivers: OpenF1Driver[]
 ): PaceDataPoint[] {
-  const isTireCompound = (value: string | null | undefined): value is TireCompound =>
-    Object.prototype.hasOwnProperty.call(TIRE_COLORS, value ?? "");
-
   const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
   const lapMap = new Map<string, number[]>(); // "driverNum-stintNum" → durations
 
@@ -387,7 +391,7 @@ export function buildPaceData(
     if (!durations || durations.length === 0) continue;
     const avg = durations.reduce((a, b) => a + b, 0) / durations.length;
     const d = driverMap.get(stint.driver_number);
-    const compound = isTireCompound(stint.compound) ? stint.compound : "UNKNOWN";
+    const compound = toTireCompound(stint.compound);
     result.push({
       driver: d?.name_acronym ?? `#${stint.driver_number}`,
       stint: `${d?.name_acronym ?? stint.driver_number} ${capitalize(stint.compound)} (${stint.lap_start}-${stint.lap_end ?? "?"})`,

@@ -130,7 +130,8 @@ export interface Stint {
   stint_number: number;
   lap_start: number;
   lap_end: number;
-  compound: "SOFT" | "MEDIUM" | "HARD" | "INTERMEDIATE" | "WET" | "UNKNOWN";
+  // OpenF1 can return null when a stint's compound is not available.
+  compound: "SOFT" | "MEDIUM" | "HARD" | "INTERMEDIATE" | "WET" | "UNKNOWN" | null;
   tyre_age_at_start: number;
 }
 
