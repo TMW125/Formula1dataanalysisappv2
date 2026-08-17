@@ -35,11 +35,7 @@ export function TelemetryChart({
             dataKey={xKey}
             type="number"
             ticks={xTicks}
-            domain={
-              xTicks && xTicks.length > 1
-                ? [xTicks[0], xTicks[xTicks.length - 1]]
-                : ["dataMin", "dataMax"]
-            }
+domain={['dataMin', 'dataMax']}
             allowDecimals
             stroke="#9ca3af"
             tick={{ fill: "#9ca3af", fontSize: 12 }}
