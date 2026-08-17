@@ -1,27 +1,51 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Check, ChevronsUpDown, Clock3, Flag, Gauge, Search, Users, X } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ScatterChart,
-  Scatter,
-  Cell,
-} from "recharts";
-import { Flag, Clock, TrendingDown } from "lucide-react";
-import { useDriversData, useLapsData, usePitsData, useStintsData } from "../hooks/useSessionData";
+  useDriversData, useLapsData, usePitsData, usePositionsData,
+  useSessionResultsData, useStintsData,
+} from "../hooks/useSessionData";
 import { useSelectedSessionKey } from "../context/F1DataContext";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import {
-  buildPaceData,
-  buildPitStops,
-  buildStintTimeline,
-  getBestLapFormatted,
+  buildCumulativeDeltaSeries, buildDefaultDriverSelection, buildDegradationSeries,
+  buildPitStops, buildPositionSeries, buildStintTimeline, getBestLapFormatted,
+  toHexColor, type StrategyLineSeries,
 } from "../utils/transformers";
+import { TIRE_COLORS, type TireCompound } from "../types/ui";
 import { LoadingSpinner } from "../components/LoadingSpinner";
+import { Badge } from "../components/ui/badge";
+import { Button, buttonVariants } from "../components/ui/button";
+import { Checkbox } from "../components/ui/checkbox";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "../components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+
+const CHART_GRID = "#2a2a36";
+const CHART_TEXT = "#9ca3af";
+const TOOLTIP_STYLE = { backgroundColor: "#15151c", border: "1px solid #2a2a36", borderRadius: "0.375rem", color: "#f5f5f5" };
+type WideChartPoint = { lap: number } & Record<string, number>;
+
+function mergeSeries(series: StrategyLineSeries[]): WideChartPoint[] {
+  const rows = new Map<number, WideChartPoint>();
+  for (const line of series) {
+    for (const point of line.values) {
+      const row = rows.get(point.lap) ?? { lap: point.lap };
+      row[line.key] = point.value;
+      rows.set(point.lap, row);
+    }
+  }
+  return [...rows.values()].sort((a, b) => a.lap - b.lap);
+}
+
+function ChartCard({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return <section className="bg-card border border-border rounded-lg p-4 md:p-6">
+    <div className="mb-5"><h2 className="text-lg text-card-foreground">{title}</h2><p className="text-sm text-muted-foreground mt-1">{description}</p></div>
+    {children}
+  </section>;
+}
+
+function ChartEmpty({ children }: { children: ReactNode }) {
+  return <div className="h-[280px] flex items-center justify-center border border-dashed border-border rounded-md text-sm text-muted-foreground text-center px-6">{children}</div>;
+}
 
 export function RaceStrategy() {
   const sessionKey = useSelectedSessionKey();
@@ -29,293 +53,180 @@ export function RaceStrategy() {
   const { data: laps, loading: lapsLoading } = useLapsData();
   const { data: stints, loading: stintsLoading } = useStintsData();
   const { data: pits, loading: pitsLoading } = usePitsData();
+  const { data: positions, loading: positionsLoading } = usePositionsData();
+  const { data: results, loading: resultsLoading } = useSessionResultsData();
+  const [selectedDrivers, setSelectedDrivers] = useState<number[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const initializedSession = useRef<number | null>(null);
+  const loading = driversLoading || lapsLoading || stintsLoading || pitsLoading || positionsLoading || resultsLoading;
 
-  const loading = driversLoading || lapsLoading || stintsLoading || pitsLoading;
-
-  const stintTimeline = useMemo(() => buildStintTimeline(stints, drivers), [stints, drivers]);
-  const pitStops = useMemo(() => buildPitStops(pits, drivers, stints), [pits, drivers, stints]);
-  const paceData = useMemo(() => buildPaceData(laps, stints, drivers), [laps, stints, drivers]);
-  const paceDataByCompound = useMemo(
-    () => ({
-      SOFT: paceData.filter((entry) => entry.compound === "SOFT"),
-      MEDIUM: paceData.filter((entry) => entry.compound === "MEDIUM"),
-      HARD: paceData.filter((entry) => entry.compound === "HARD"),
-    }),
-    [paceData]
-  );
-
-  // Per-driver lap scatter data: top 5 drivers by number of laps
-  const lapScatterSeries = useMemo(() => {
-    const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
-    const grouped = new Map<number, { lap: number; time: number }[]>();
-    for (const lap of laps) {
-      if (lap.lap_duration === null || lap.is_pit_out_lap) continue;
-      const list = grouped.get(lap.driver_number) ?? [];
-      list.push({ lap: lap.lap_number, time: lap.lap_duration });
-      grouped.set(lap.driver_number, list);
+  useEffect(() => {
+    if (sessionKey == null) {
+      initializedSession.current = null;
+      setSelectedDrivers([]);
+      return;
     }
-    return [...grouped.entries()]
-      .sort((a, b) => b[1].length - a[1].length)
-      .slice(0, 5)
-      .map(([num, data]) => {
-        const d = driverMap.get(num);
-        return {
-          name: d?.name_acronym ?? `#${num}`,
-          color: d?.team_colour ? `#${d.team_colour}` : "#888888",
-          data,
-        };
-      });
-  }, [laps, drivers]);
+    if (initializedSession.current === sessionKey) return;
+    setSelectedDrivers([]);
+    const currentDrivers = drivers.filter((driver) => driver.session_key === sessionKey);
+    if (loading || currentDrivers.length === 0) return;
+    const currentResults = results.filter((result) => result.session_key === sessionKey);
+    const currentLaps = laps.filter((lap) => lap.session_key === sessionKey);
+    setSelectedDrivers(buildDefaultDriverSelection(currentDrivers, currentResults, currentLaps));
+    initializedSession.current = sessionKey;
+  }, [sessionKey, loading, drivers, results, laps]);
 
-  // Stats
-  const totalLaps = laps.length > 0 ? Math.max(...laps.map((l) => l.lap_number)) : 0;
-  const avgPitDuration =
-    pits.length > 0
-      ? (
-          pits
-            .filter((p) => p.pit_duration != null)
-            .reduce((sum, p) => sum + (p.pit_duration ?? 0), 0) /
-          pits.filter((p) => p.pit_duration != null).length
-        ).toFixed(2) + "s"
-      : "—";
-  const fastestLap = getBestLapFormatted(laps);
+  const selectedSet = useMemo(() => new Set(selectedDrivers), [selectedDrivers]);
+  const defaults = useMemo(() => buildDefaultDriverSelection(drivers, results, laps), [drivers, results, laps]);
+  const resultPosition = useMemo(() => new Map(results.map((result) => [result.driver_number, result.position])), [results]);
+  const orderedDrivers = useMemo(() => [...drivers].sort((a, b) => {
+    const aPosition = resultPosition.get(a.driver_number) ?? Infinity;
+    const bPosition = resultPosition.get(b.driver_number) ?? Infinity;
+    return aPosition - bPosition || a.name_acronym.localeCompare(b.name_acronym);
+  }), [drivers, resultPosition]);
+  const selectedDriverData = useMemo(() => selectedDrivers.map((number) => drivers.find((driver) => driver.driver_number === number)).filter((driver) => driver != null), [selectedDrivers, drivers]);
+  const filteredLaps = useMemo(() => laps.filter((lap) => selectedSet.has(lap.driver_number)), [laps, selectedSet]);
+  const filteredStints = useMemo(() => stints.filter((stint) => selectedSet.has(stint.driver_number)), [stints, selectedSet]);
+  const filteredPits = useMemo(() => pits.filter((pit) => selectedSet.has(pit.driver_number)), [pits, selectedSet]);
+  const stintTimeline = useMemo(() => {
+    const order = new Map(selectedDrivers.map((number, index) => [number, index]));
+    return buildStintTimeline(filteredStints, drivers).sort((a, b) => (order.get(a.driverNumber) ?? 0) - (order.get(b.driverNumber) ?? 0));
+  }, [filteredStints, drivers, selectedDrivers]);
+  const pitStops = useMemo(() => buildPitStops(filteredPits, drivers, filteredStints), [filteredPits, drivers, filteredStints]);
+  const cumulative = useMemo(() => buildCumulativeDeltaSeries(laps, drivers, selectedDrivers, results), [laps, drivers, selectedDrivers, results]);
+  const degradation = useMemo(() => buildDegradationSeries(laps, stints, drivers, selectedDrivers), [laps, stints, drivers, selectedDrivers]);
+  const positionSeries = useMemo(() => buildPositionSeries(laps, positions, drivers, selectedDrivers), [laps, positions, drivers, selectedDrivers]);
+  const cumulativeData = useMemo(() => mergeSeries(cumulative.series), [cumulative.series]);
+  const degradationData = useMemo(() => mergeSeries(degradation), [degradation]);
+  const positionData = useMemo(() => mergeSeries(positionSeries), [positionSeries]);
+  const totalLaps = laps.length ? Math.max(...laps.map((lap) => lap.lap_number)) : 0;
+  const timelineTicks = useMemo(() => {
+    if (!totalLaps) return [];
+    const interval = totalLaps <= 30 ? 5 : 10;
+    const ticks = [1];
+    for (let lap = interval; lap < totalLaps; lap += interval) ticks.push(lap);
+    if (ticks.at(-1) !== totalLaps) ticks.push(totalLaps);
+    return ticks;
+  }, [totalLaps]);
+  const referenceName = drivers.find((driver) => driver.driver_number === cumulative.referenceDriverNumber)?.name_acronym;
+  const fastestSelectedLap = getBestLapFormatted(filteredLaps.filter((lap) => !lap.is_pit_out_lap));
 
-  if (!sessionKey) {
-    return (
-      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <Flag className="w-12 h-12 text-muted-foreground mb-4" />
-        <h2 className="text-xl text-foreground mb-2">No Session Selected</h2>
-        <p className="text-muted-foreground">Select a season, event, and session from the sidebar to view race strategy.</p>
-      </div>
-    );
-  }
+  const toggleDriver = (driverNumber: number) => setSelectedDrivers((current) => current.includes(driverNumber)
+    ? current.filter((number) => number !== driverNumber)
+    : [...current, driverNumber]);
 
-  if (loading) return <LoadingSpinner />;
+  if (!sessionKey) return <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
+    <Flag className="w-12 h-12 text-muted-foreground mb-4" /><h2 className="text-xl text-foreground mb-2">No Session Selected</h2>
+    <p className="text-muted-foreground">Select a season, event, and session from the sidebar to view race strategy.</p>
+  </div>;
+  if (loading || initializedSession.current !== sessionKey) return <LoadingSpinner />;
 
-  return (
-    <div className="p-6 space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl tracking-tight text-foreground mb-2">Race Strategy</h1>
-        <p className="text-muted-foreground">Analyze race pace and tire strategy</p>
-      </div>
+  return <div className="p-4 md:p-6 space-y-6">
+    <header><h1 className="text-3xl tracking-tight text-foreground mb-2">Race Strategy</h1><p className="text-muted-foreground">Compare race pace, tyre life, pit timing, and track position.</p></header>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-card border border-border rounded-lg p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Flag className="w-5 h-5 text-primary" />
-            </div>
-            <h3 className="text-card-foreground">Total Laps</h3>
-          </div>
-          <p className="text-3xl font-bold text-card-foreground">{totalLaps || "—"}</p>
+    <section className="bg-card border border-border rounded-lg p-4 md:p-5 space-y-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div><h2 className="text-card-foreground flex items-center gap-2"><Users className="w-4 h-4 text-primary" /> Drivers</h2><p className="text-xs text-muted-foreground mt-1">The selection applies to every chart and table below.</p></div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger asChild><button type="button" className={buttonVariants({ variant: "outline", className: "min-w-52 justify-between" })} aria-expanded={pickerOpen}>
+              <span className="inline-flex items-center gap-2"><Search className="w-4 h-4" />{selectedDrivers.length ? `${selectedDrivers.length} selected` : "Choose drivers"}</span><ChevronsUpDown className="w-4 h-4 text-muted-foreground" />
+            </button></PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end"><Command><CommandInput placeholder="Search drivers or teams…" /><CommandList className="max-h-72"><CommandEmpty>No drivers found.</CommandEmpty><CommandGroup>
+              {orderedDrivers.map((driver) => {
+                const selected = selectedSet.has(driver.driver_number);
+                return <CommandItem
+                  key={driver.driver_number}
+                  value={`${driver.full_name} ${driver.name_acronym} ${driver.team_name}`}
+                  onSelect={() => toggleDriver(driver.driver_number)}
+                  className="gap-3 data-[selected=true]:bg-secondary data-[selected=true]:text-foreground"
+                >
+                  <Checkbox checked={selected} aria-label={`Select ${driver.full_name}`} /><span className="w-1 h-7 rounded-full" style={{ backgroundColor: toHexColor(driver.team_colour) }} />
+                  <span className="min-w-0 flex-1"><span className="block text-sm truncate">{driver.full_name}</span><span className="block text-xs text-muted-foreground truncate">{driver.team_name}</span></span>
+                  {resultPosition.has(driver.driver_number) && <span className="text-xs font-mono text-muted-foreground">P{resultPosition.get(driver.driver_number)}</span>}{selected && <Check className="w-4 h-4 text-primary" />}
+                </CommandItem>;
+              })}
+            </CommandGroup></CommandList></Command></PopoverContent>
+          </Popover>
+          <Button variant="secondary" size="sm" onClick={() => setSelectedDrivers(defaults)}>Top 5</Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedDrivers(orderedDrivers.map((driver) => driver.driver_number))}>Select all</Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedDrivers([])}>Clear</Button>
         </div>
-
-        <div className="bg-card border border-border rounded-lg p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Clock className="w-5 h-5 text-primary" />
-            </div>
-            <h3 className="text-card-foreground">Avg Pit Stop</h3>
-          </div>
-          <p className="text-3xl font-bold text-card-foreground font-mono">{avgPitDuration}</p>
-        </div>
-
-        <div className="bg-card border border-border rounded-lg p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-              <TrendingDown className="w-5 h-5 text-primary" />
-            </div>
-            <h3 className="text-card-foreground">Fastest Lap</h3>
-          </div>
-          <p className="text-3xl font-bold text-card-foreground font-mono">{fastestLap}</p>
-        </div>
       </div>
+      {selectedDriverData.length ? <div className="flex flex-wrap gap-2">{selectedDriverData.map((driver) => <Badge key={driver.driver_number} variant="outline" className="gap-2 py-1 pl-2.5 pr-1">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: toHexColor(driver.team_colour) }} />{driver.name_acronym}
+        <button type="button" onClick={() => toggleDriver(driver.driver_number)} className="rounded-sm p-0.5 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Remove ${driver.full_name}`}><X className="w-3 h-3" /></button>
+      </Badge>)}</div> : <p className="text-sm text-muted-foreground">No drivers selected. Choose one or more drivers to populate the analysis.</p>}
+    </section>
 
-      {/* Stint Timeline Visualization */}
-      <div className="bg-card border border-border rounded-lg p-6">
-        <h3 className="mb-6 text-card-foreground">Stint Timeline Visualization</h3>
-        {stintTimeline.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No stint data available for this session.</p>
-        ) : (
-          <div className="space-y-4">
-            {stintTimeline.map((row) => (
-              <div key={row.driverNumber}>
-                <p className="text-sm text-muted-foreground mb-2" style={{ color: row.color }}>
-                  {row.driverName}
-                </p>
-                <div className="flex gap-1 h-12">
-                  {row.stints.map((s, i) => (
-                    <div
-                      key={i}
-                      className="rounded flex items-center justify-center text-xs font-semibold overflow-hidden"
-                      style={{
-                        width: `${s.widthPct}%`,
-                        backgroundColor: s.compoundColor,
-                        color: s.textColor,
-                        minWidth: "2rem",
-                      }}
-                      title={`${s.compound} — Laps ${s.lapStart}–${s.lapEnd}`}
-                    >
-                      {s.compound.charAt(0)}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>Lap 1</span>
-                  {row.stints.map((s, i) => (
-                    <span key={i}>Lap {s.lapEnd}</span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Lap Times per Stint */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="mb-4 text-card-foreground">Lap Times Throughout Race</h3>
-        {lapScatterSeries.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No lap data available.</p>
-        ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <ScatterChart>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
-              <XAxis
-                dataKey="lap"
-                type="number"
-                stroke="#9ca3af"
-                tick={{ fill: "#9ca3af", fontSize: 12 }}
-                label={{ value: "Lap", position: "insideBottom", offset: -5, fill: "#9ca3af" }}
-              />
-              <YAxis
-                dataKey="time"
-                stroke="#9ca3af"
-                tick={{ fill: "#9ca3af", fontSize: 12 }}
-                label={{ value: "Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#15151c",
-                  border: "1px solid #2a2a36",
-                  borderRadius: "0.375rem",
-                  color: "#f5f5f5",
-                }}
-                labelStyle={{ color: "#9ca3af" }}
-                formatter={(value: number) => [value.toFixed(3) + "s", "Lap time"]}
-              />
-              {lapScatterSeries.map((series) => (
-                <Scatter key={series.name} name={series.name} data={series.data} fill={series.color} />
-              ))}
-            </ScatterChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* Average Pace Comparison */}
-      <div className="bg-card border border-border rounded-lg p-4">
-        <h3 className="mb-4 text-card-foreground">Average Pace by Stint</h3>
-        {paceData.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No pace data available.</p>
-        ) : (
-          <Tabs defaultValue="SOFT" className="w-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="SOFT">Soft</TabsTrigger>
-              <TabsTrigger value="MEDIUM">Medium</TabsTrigger>
-              <TabsTrigger value="HARD">Hard</TabsTrigger>
-            </TabsList>
-
-            {(["SOFT", "MEDIUM", "HARD"] as const).map((compound) => {
-              const compoundData = paceDataByCompound[compound];
-              return (
-                <TabsContent key={compound} value={compound}>
-                  {compoundData.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No {compound.toLowerCase()} compound pace data available.</p>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={compoundData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#2a2a36" />
-                        <XAxis
-                          dataKey="stint"
-                          stroke="#9ca3af"
-                          tick={{ fill: "#9ca3af", fontSize: 10 }}
-                          interval={0}
-                          angle={-25}
-                          textAnchor="end"
-                          height={60}
-                        />
-                        <YAxis
-                          stroke="#9ca3af"
-                          tick={{ fill: "#9ca3af", fontSize: 12 }}
-                          label={{ value: "Avg Lap Time (s)", angle: -90, position: "insideLeft", fill: "#9ca3af" }}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#15151c",
-                            border: "1px solid #2a2a36",
-                            borderRadius: "0.375rem",
-                            color: "#f5f5f5",
-                          }}
-                          labelStyle={{ color: "#9ca3af" }}
-                          formatter={(value: number) => [value.toFixed(3) + "s", "Avg pace"]}
-                        />
-                        <Bar dataKey="avgPace" radius={[4, 4, 0, 0]}>
-                          {compoundData.map((entry) => (
-                            <Cell key={`cell-${compound}-${entry.stint}`} fill={entry.color} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </TabsContent>
-              );
-            })}
-          </Tabs>
-        )}
-      </div>
-
-      {/* Pit Stop Summary */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-border">
-          <h3 className="text-card-foreground">Pit Stop Summary</h3>
-        </div>
-        {pitStops.length === 0 ? (
-          <p className="text-muted-foreground text-sm p-4">No pit stop data available.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-secondary border-b border-border">
-                  <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Driver</th>
-                  <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Lap</th>
-                  <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Duration</th>
-                  <th className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">Compound</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {pitStops.map((stop, idx) => (
-                  <tr key={idx} className="hover:bg-secondary/50 transition-colors">
-                    <td className="px-4 py-3 text-card-foreground">{stop.driver}</td>
-                    <td className="px-4 py-3 text-muted-foreground">Lap {stop.lap}</td>
-                    <td className="px-4 py-3 text-card-foreground font-mono">{stop.duration}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: stop.compoundColor }}
-                        />
-                        <span className="text-muted-foreground">{stop.compound}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <Metric icon={<Users />} label="Selected drivers" value={`${selectedDrivers.length}`} />
+      <Metric icon={<Clock3 />} label="Pit stops" value={`${filteredPits.length}`} />
+      <Metric icon={<Gauge />} label="Fastest clean lap" value={fastestSelectedLap} mono />
     </div>
-  );
+
+    {!selectedDrivers.length ? <div className="bg-card border border-dashed border-border rounded-lg py-20 px-6 text-center"><Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" /><h2 className="text-lg text-card-foreground">Select drivers to compare</h2><p className="text-sm text-muted-foreground mt-1">Use the driver picker above or restore the top five finishers.</p><Button className="mt-5" onClick={() => setSelectedDrivers(defaults)}>Show top 5</Button></div> : <>
+      <ChartCard title="Tyre strategy" description="Every stint is aligned to the same race-lap axis; vertical markers indicate pit stops.">
+        {!stintTimeline.length ? <ChartEmpty>No stint data is available for the selected drivers.</ChartEmpty> : <div className="overflow-x-auto pb-2"><div className="min-w-[720px] space-y-3">
+          {stintTimeline.map((row) => <div key={row.driverNumber} className="flex items-center gap-3">
+            <div className="w-20 shrink-0 text-sm font-semibold text-right" style={{ color: row.color }}>{drivers.find((driver) => driver.driver_number === row.driverNumber)?.name_acronym ?? row.driverName}</div>
+            <div className="relative h-9 flex-1 bg-secondary/70 rounded overflow-hidden">
+              {row.stints.map((stint, index) => <div key={`${stint.lapStart}-${index}`} className="absolute top-0 h-full flex items-center justify-center text-xs font-bold border-x border-black/20" style={{ left: `${((stint.lapStart - 1) / Math.max(totalLaps, 1)) * 100}%`, width: `${((stint.lapEnd - stint.lapStart + 1) / Math.max(totalLaps, 1)) * 100}%`, backgroundColor: stint.compoundColor, color: stint.textColor }} title={`${stint.compound}: laps ${stint.lapStart}–${stint.lapEnd}`}><span className="truncate px-1">{stint.compound.charAt(0)}</span></div>)}
+              {row.pitMarkers.map((lap) => <span key={lap} className="absolute top-0 h-full w-px bg-white/80 z-10" style={{ left: `${((lap - 1) / Math.max(totalLaps, 1)) * 100}%` }} title={`Pit stop: lap ${lap}`} />)}
+            </div>
+          </div>)}
+          <div className="flex items-start gap-3"><div className="w-20 shrink-0" /><div className="relative h-5 flex-1 border-t border-border">{timelineTicks.map((lap) => <span key={lap} className="absolute top-1 -translate-x-1/2 text-[10px] text-muted-foreground" style={{ left: `${((lap - 1) / Math.max(totalLaps - 1, 1)) * 100}%` }}>{lap}</span>)}</div></div>
+          <div className="flex flex-wrap gap-3 pl-[5.75rem] pt-1">{(Object.keys(TIRE_COLORS) as TireCompound[]).filter((compound) => filteredStints.some((stint) => (stint.compound ?? "UNKNOWN") === compound)).map((compound) => <span key={compound} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><span className="w-2.5 h-2.5 rounded-full border border-white/20" style={{ backgroundColor: TIRE_COLORS[compound] }} />{compound}</span>)}</div>
+        </div></div>}
+      </ChartCard>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <StrategyLineChart title="Cumulative race-time delta" description={`Time gained or lost through the race${referenceName ? ` relative to ${referenceName}` : ""}. Pit-loss laps are included.`} data={cumulativeData} series={cumulative.series} yLabel="Delta (s)" yFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(0)}s`} tooltipFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(3)}s`} empty="Comparable lap-time data is unavailable." zeroLine />
+        <StrategyLineChart title="Position progression" description="End-of-lap running position, with P1 at the top of the chart." data={positionData} series={positionSeries} yFormatter={(value) => `P${value}`} tooltipFormatter={(value) => `P${value}`} empty="Position history is unavailable for the selected drivers." reversed position />
+      </div>
+
+      <StrategyLineChart title="Tyre degradation by stint" description="Three-lap rolling pace change from each stint’s opening baseline; pit-out and obvious slow laps are removed." data={degradationData} series={degradation} xLabel="Tyre age (laps)" yLabel="Pace change" yFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(1)}s`} tooltipFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(3)}s`} empty="There are not enough clean laps to calculate degradation." zeroLine degradationCompounds={degradation.map((line) => [line.key, line.compound])} fullWidth />
+
+      <section className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="p-4 md:p-6 border-b border-border"><h2 className="text-lg text-card-foreground">Pit-stop summary</h2><p className="text-sm text-muted-foreground mt-1">Pit-lane transit and stationary time are reported separately when available.</p></div>
+        {!pitStops.length ? <p className="text-muted-foreground text-sm p-6">No pit-stop data is available for the selected drivers.</p> : <div className="overflow-x-auto"><table className="w-full"><thead><tr className="bg-secondary border-b border-border">
+          {['Driver', 'Lap', 'Pit lane', 'Stationary', 'New tyre'].map((heading) => <th key={heading} className="px-4 py-3 text-left text-xs text-muted-foreground uppercase tracking-wider">{heading}</th>)}
+        </tr></thead><tbody className="divide-y divide-border">{pitStops.map((stop, index) => <tr key={`${stop.driverNumber}-${stop.lap}-${index}`} className="hover:bg-secondary/50 transition-colors">
+          <td className="px-4 py-3 text-card-foreground"><span className="inline-flex items-center gap-2"><span className="w-1 h-4 rounded-full" style={{ backgroundColor: toHexColor(drivers.find((driver) => driver.driver_number === stop.driverNumber)?.team_colour) }} />{stop.driver}</span></td>
+          <td className="px-4 py-3 text-muted-foreground">Lap {stop.lap}</td><td className="px-4 py-3 text-card-foreground font-mono">{stop.laneDuration}</td><td className="px-4 py-3 text-card-foreground font-mono">{stop.stopDuration}</td>
+          <td className="px-4 py-3"><span className="inline-flex items-center gap-2 text-muted-foreground"><span className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: stop.compoundColor }} />{stop.compound}</span></td>
+        </tr>)}</tbody></table></div>}
+      </section>
+    </>}
+  </div>;
+}
+
+function Metric({ icon, label, value, mono = false }: { icon: ReactNode; label: string; value: string; mono?: boolean }) {
+  return <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-3"><span className="text-primary [&>svg]:w-5 [&>svg]:h-5">{icon}</span><div><p className="text-xs text-muted-foreground">{label}</p><p className={`text-xl font-bold ${mono ? "font-mono" : ""}`}>{value}</p></div></div>;
+}
+
+interface StrategyLineChartProps {
+  title: string; description: string; data: WideChartPoint[]; series: StrategyLineSeries[];
+  yFormatter: (value: number) => string; tooltipFormatter: (value: number) => string; empty: string;
+  xLabel?: string; yLabel?: string; zeroLine?: boolean; reversed?: boolean; position?: boolean; fullWidth?: boolean;
+  degradationCompounds?: Array<[string, TireCompound]>;
+}
+
+function StrategyLineChart({ title, description, data, series, yFormatter, tooltipFormatter, empty, xLabel = "Race lap", yLabel, zeroLine, reversed, position, fullWidth, degradationCompounds = [] }: StrategyLineChartProps) {
+  const compoundMap = new Map(degradationCompounds);
+  return <ChartCard title={title} description={description}>{!data.length ? <ChartEmpty>{empty}</ChartEmpty> : <ResponsiveContainer width="100%" height={fullWidth ? 380 : 340}>
+    <LineChart data={data} margin={{ top: 8, right: 18, left: 8, bottom: 12 }}>
+      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+      <XAxis dataKey="lap" type="number" domain={xLabel === "Race lap" ? [1, "dataMax"] : ["dataMin", "dataMax"]} allowDecimals={false} stroke={CHART_TEXT} tick={{ fill: CHART_TEXT, fontSize: 11 }} label={{ value: xLabel, position: "insideBottom", offset: -8, fill: CHART_TEXT }} />
+      <YAxis reversed={reversed} domain={position ? [1, 20] : ["auto", "auto"]} allowDecimals={!position} stroke={CHART_TEXT} tick={{ fill: CHART_TEXT, fontSize: 11 }} tickFormatter={yFormatter} label={yLabel ? { value: yLabel, angle: -90, position: "insideLeft", fill: CHART_TEXT } : undefined} width={position ? 38 : 58} />
+      {zeroLine && <ReferenceLine y={0} stroke="#f5f5f5" strokeOpacity={0.5} />}
+      <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(value) => `${xLabel === "Race lap" ? "Lap" : "Tyre age"} ${value}`} formatter={(value: number, name: string) => [tooltipFormatter(value), name]} />
+      <Legend wrapperStyle={{ paddingTop: 12 }} />
+      {series.map((line) => {
+        const compound = compoundMap.get(line.key);
+        const dash = compound === "MEDIUM" ? "7 3" : compound === "HARD" ? "3 3" : compound && compound !== "SOFT" ? "10 3 2 3" : undefined;
+        return <Line key={line.key} type={position ? "stepAfter" : compound ? "monotone" : "linear"} dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} strokeDasharray={dash} dot={false} connectNulls={false} />;
+      })}
+    </LineChart>
+  </ResponsiveContainer>}</ChartCard>;
 }

@@ -6,7 +6,7 @@
  * inside UI components.
  */
 
-import type { CarData, Lap, OpenF1Driver, Pit, Session, SessionResult, Stint, Weather } from "../types/openf1";
+import type { CarData, Lap, OpenF1Driver, Pit, Position, Session, SessionResult, Stint, Weather } from "../types/openf1";
 import type { LeaderboardRow, SessionInfoData, TireCompound } from "../types/ui";
 import { TIRE_COLORS } from "../types/ui";
 
@@ -312,9 +312,12 @@ export function buildStintTimeline(
 // ─── Pit stop table ───────────────────────────────────────────────────────────
 
 export interface PitStopRow {
+  driverNumber: number;
   driver: string;
   lap: number;
   duration: string;
+  laneDuration: string;
+  stopDuration: string;
   compound: string;
   compoundColor: string;
 }
@@ -330,20 +333,30 @@ export function buildPitStops(
     .map((pit) => {
       const d = driverMap.get(pit.driver_number);
       // The newly fitted compound is in the stint that starts on or after pit lap
-      const nextStint = stints.find(
-        (s) =>
-          s.driver_number === pit.driver_number &&
-          s.lap_start >= pit.lap_number
-      );
+      const nextStint = [...stints]
+        .filter(
+          (s) =>
+            s.driver_number === pit.driver_number &&
+            s.lap_start >= pit.lap_number &&
+            s.lap_start <= pit.lap_number + 2
+        )
+        .sort((a, b) => a.lap_start - b.lap_start)[0];
       const compound = nextStint
         ? capitalize(nextStint.compound)
         : "Unknown";
       const compoundKey = toTireCompound(nextStint?.compound);
 
       return {
+        driverNumber: pit.driver_number,
         driver: d?.full_name ?? `#${pit.driver_number}`,
         lap: pit.lap_number,
-        duration: pit.pit_duration != null ? `${pit.pit_duration.toFixed(1)}s` : "—",
+        duration: (pit.lane_duration ?? pit.pit_duration) != null
+          ? `${(pit.lane_duration ?? pit.pit_duration)!.toFixed(1)}s`
+          : "—",
+        laneDuration: (pit.lane_duration ?? pit.pit_duration) != null
+          ? `${(pit.lane_duration ?? pit.pit_duration)!.toFixed(1)}s`
+          : "—",
+        stopDuration: pit.stop_duration != null ? `${pit.stop_duration.toFixed(1)}s` : "—",
         compound,
         compoundColor: TIRE_COLORS[compoundKey] ?? "#888",
       };
@@ -402,6 +415,222 @@ export function buildPaceData(
   }
 
   return result.sort((a, b) => a.avgPace - b.avgPace);
+}
+
+// ─── Race strategy comparison ───────────────────────────────────────────────
+
+export function buildDefaultDriverSelection(
+  drivers: OpenF1Driver[],
+  results: SessionResult[],
+  laps: Lap[],
+  limit = 5
+): number[] {
+  const available = new Set(drivers.map((driver) => driver.driver_number));
+  const classified = [...results]
+    .filter((result) => available.has(result.driver_number) && !result.dnf && !result.dns && !result.dsq)
+    .sort((a, b) => a.position - b.position)
+    .map((result) => result.driver_number);
+
+  if (classified.length > 0) return classified.slice(0, limit);
+
+  const lapCounts = new Map<number, number>();
+  for (const lap of laps) {
+    if (!available.has(lap.driver_number)) continue;
+    lapCounts.set(lap.driver_number, (lapCounts.get(lap.driver_number) ?? 0) + 1);
+  }
+
+  return [...drivers]
+    .sort((a, b) => {
+      const countDelta = (lapCounts.get(b.driver_number) ?? 0) - (lapCounts.get(a.driver_number) ?? 0);
+      return countDelta || a.name_acronym.localeCompare(b.name_acronym);
+    })
+    .slice(0, limit)
+    .map((driver) => driver.driver_number);
+}
+
+export interface StrategyLinePoint {
+  lap: number;
+  value: number;
+}
+
+export interface StrategyLineSeries {
+  key: string;
+  driverNumber: number;
+  name: string;
+  color: string;
+  values: StrategyLinePoint[];
+}
+
+function driverDetails(drivers: OpenF1Driver[], driverNumber: number) {
+  const driver = drivers.find((entry) => entry.driver_number === driverNumber);
+  return {
+    name: driver?.name_acronym ?? `#${driverNumber}`,
+    color: toHexColor(driver?.team_colour),
+  };
+}
+
+export function buildCumulativeDeltaSeries(
+  laps: Lap[],
+  drivers: OpenF1Driver[],
+  selectedDriverNumbers: number[],
+  results: SessionResult[]
+): { referenceDriverNumber: number | null; series: StrategyLineSeries[] } {
+  if (selectedDriverNumbers.length === 0) return { referenceDriverNumber: null, series: [] };
+
+  const selected = new Set(selectedDriverNumbers);
+  const ranked = [...results]
+    .filter((result) => selected.has(result.driver_number) && !result.dnf && !result.dns && !result.dsq)
+    .sort((a, b) => a.position - b.position);
+  const referenceDriverNumber = ranked[0]?.driver_number ?? selectedDriverNumbers[0];
+
+  const lapDurations = new Map<number, Map<number, number>>();
+  for (const lap of laps) {
+    if (!selected.has(lap.driver_number) || lap.lap_duration == null || lap.lap_duration <= 0) continue;
+    const driverLaps = lapDurations.get(lap.driver_number) ?? new Map<number, number>();
+    driverLaps.set(lap.lap_number, lap.lap_duration);
+    lapDurations.set(lap.driver_number, driverLaps);
+  }
+
+  const referenceLaps = lapDurations.get(referenceDriverNumber);
+  if (!referenceLaps?.has(1)) return { referenceDriverNumber, series: [] };
+
+  return {
+    referenceDriverNumber,
+    series: selectedDriverNumbers.flatMap((driverNumber) => {
+      const driverLaps = lapDurations.get(driverNumber);
+      if (!driverLaps?.has(1)) return [];
+
+      const firstDelta = driverLaps.get(1)! - referenceLaps.get(1)!;
+      let driverTotal = 0;
+      let referenceTotal = 0;
+      const values: StrategyLinePoint[] = [];
+      const maxLap = Math.max(...driverLaps.keys());
+
+      for (let lapNumber = 1; lapNumber <= maxLap; lapNumber += 1) {
+        const duration = driverLaps.get(lapNumber);
+        const referenceDuration = referenceLaps.get(lapNumber);
+        if (duration == null || referenceDuration == null) break;
+        driverTotal += duration;
+        referenceTotal += referenceDuration;
+        values.push({
+          lap: lapNumber,
+          value: Number((driverTotal - referenceTotal - firstDelta).toFixed(3)),
+        });
+      }
+
+      const details = driverDetails(drivers, driverNumber);
+      return [{ key: `delta-${driverNumber}`, driverNumber, ...details, values }];
+    }),
+  };
+}
+
+export interface DegradationSeries extends StrategyLineSeries {
+  stintNumber: number;
+  compound: TireCompound;
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+export function buildDegradationSeries(
+  laps: Lap[],
+  stints: Stint[],
+  drivers: OpenF1Driver[],
+  selectedDriverNumbers: number[]
+): DegradationSeries[] {
+  const selected = new Set(selectedDriverNumbers);
+
+  return stints
+    .filter((stint) => selected.has(stint.driver_number))
+    .sort((a, b) => a.driver_number - b.driver_number || a.stint_number - b.stint_number)
+    .flatMap((stint) => {
+      const stintLaps = laps
+        .filter(
+          (lap) =>
+            lap.driver_number === stint.driver_number &&
+            lap.lap_number >= stint.lap_start &&
+            lap.lap_number <= (stint.lap_end ?? Infinity) &&
+            lap.lap_duration != null &&
+            lap.lap_duration > 0 &&
+            !lap.is_pit_out_lap
+        )
+        .sort((a, b) => a.lap_number - b.lap_number) as Array<Lap & { lap_duration: number }>;
+
+      if (stintLaps.length < 2) return [];
+      const durations = stintLaps.map((lap) => lap.lap_duration);
+      const center = median(durations);
+      const absoluteDeviations = durations.map((duration) => Math.abs(duration - center));
+      const threshold = Math.max(3, median(absoluteDeviations) * 3);
+      const cleanLaps = stintLaps.filter((lap) => Math.abs(lap.lap_duration - center) <= threshold);
+      if (cleanLaps.length < 2) return [];
+
+      const baseline = median(cleanLaps.slice(0, 3).map((lap) => lap.lap_duration));
+      const rawValues = cleanLaps.map((lap) => ({
+        lap: stint.tyre_age_at_start + (lap.lap_number - stint.lap_start),
+        value: lap.lap_duration - baseline,
+      }));
+      const values = rawValues.map((point, index) => ({
+        lap: point.lap,
+        value: Number(median(rawValues.slice(Math.max(0, index - 2), index + 1).map((item) => item.value)).toFixed(3)),
+      }));
+
+      const details = driverDetails(drivers, stint.driver_number);
+      const compound = toTireCompound(stint.compound);
+      return [{
+        key: `degradation-${stint.driver_number}-${stint.stint_number}`,
+        driverNumber: stint.driver_number,
+        name: `${details.name} S${stint.stint_number} ${capitalize(compound)}`,
+        color: details.color,
+        stintNumber: stint.stint_number,
+        compound,
+        values,
+      }];
+    });
+}
+
+export function buildPositionSeries(
+  laps: Lap[],
+  positions: Position[],
+  drivers: OpenF1Driver[],
+  selectedDriverNumbers: number[]
+): StrategyLineSeries[] {
+  return selectedDriverNumbers.flatMap((driverNumber) => {
+    const driverLaps = laps
+      .filter((lap) => lap.driver_number === driverNumber)
+      .sort((a, b) => a.lap_number - b.lap_number);
+    const driverPositions = positions
+      .filter((position) => position.driver_number === driverNumber)
+      .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    if (driverLaps.length === 0 || driverPositions.length === 0) return [];
+
+    let positionIndex = 0;
+    let latestPosition: number | null = null;
+    const values: StrategyLinePoint[] = [];
+
+    for (let index = 0; index < driverLaps.length; index += 1) {
+      const lap = driverLaps[index];
+      const nextLap = driverLaps[index + 1];
+      const endTimestamp = nextLap ? Date.parse(nextLap.date_start) : Number.POSITIVE_INFINITY;
+      while (
+        positionIndex < driverPositions.length &&
+        Date.parse(driverPositions[positionIndex].date) <= endTimestamp
+      ) {
+        latestPosition = driverPositions[positionIndex].position;
+        positionIndex += 1;
+      }
+      if (latestPosition != null) values.push({ lap: lap.lap_number, value: latestPosition });
+    }
+
+    const details = driverDetails(drivers, driverNumber);
+    return values.length > 0
+      ? [{ key: `position-${driverNumber}`, driverNumber, ...details, values }]
+      : [];
+  });
 }
 
 // ─── Stats helpers ────────────────────────────────────────────────────────────
