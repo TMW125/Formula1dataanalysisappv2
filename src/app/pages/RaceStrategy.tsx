@@ -7,12 +7,13 @@ import {
 } from "../hooks/useSessionData";
 import { useSelectedSessionKey } from "../context/F1DataContext";
 import {
-  buildCumulativeDeltaSeries, buildDefaultDriverSelection, buildDegradationSeries,
-  buildPitStops, buildPositionSeries, buildStintTimeline, getBestLapFormatted,
+  buildCumulativeDeltaSeries, buildDefaultDriverSelection, buildLapTimeSeries,
+  buildPitStops, buildPositionSeries, buildStintTimeline, formatLapTime, getBestLapFormatted,
   toHexColor, type StrategyLineSeries,
 } from "../utils/transformers";
 import { TIRE_COLORS, type TireCompound } from "../types/ui";
 import { LoadingSpinner } from "../components/LoadingSpinner";
+import { LapTimeViolinChart } from "../components/charts/LapTimeViolinChart";
 import { Badge } from "../components/ui/badge";
 import { Button, buttonVariants } from "../components/ui/button";
 import { Checkbox } from "../components/ui/checkbox";
@@ -94,10 +95,10 @@ export function RaceStrategy() {
   }, [filteredStints, drivers, selectedDrivers]);
   const pitStops = useMemo(() => buildPitStops(filteredPits, drivers, filteredStints), [filteredPits, drivers, filteredStints]);
   const cumulative = useMemo(() => buildCumulativeDeltaSeries(laps, drivers, selectedDrivers, results), [laps, drivers, selectedDrivers, results]);
-  const degradation = useMemo(() => buildDegradationSeries(laps, stints, drivers, selectedDrivers), [laps, stints, drivers, selectedDrivers]);
+  const lapTimeSeries = useMemo(() => buildLapTimeSeries(laps, pits, drivers, selectedDrivers), [laps, pits, drivers, selectedDrivers]);
   const positionSeries = useMemo(() => buildPositionSeries(laps, positions, drivers, selectedDrivers), [laps, positions, drivers, selectedDrivers]);
   const cumulativeData = useMemo(() => mergeSeries(cumulative.series), [cumulative.series]);
-  const degradationData = useMemo(() => mergeSeries(degradation), [degradation]);
+  const lapTimeData = useMemo(() => mergeSeries(lapTimeSeries), [lapTimeSeries]);
   const positionData = useMemo(() => mergeSeries(positionSeries), [positionSeries]);
   const totalLaps = laps.length ? Math.max(...laps.map((lap) => lap.lap_number)) : 0;
   const timelineTicks = useMemo(() => {
@@ -166,8 +167,12 @@ export function RaceStrategy() {
     </div>
 
     {!selectedDrivers.length ? <div className="bg-card border border-dashed border-border rounded-lg py-20 px-6 text-center"><Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" /><h2 className="text-lg text-card-foreground">Select drivers to compare</h2><p className="text-sm text-muted-foreground mt-1">Use the driver picker above or restore the top five finishers.</p><Button className="mt-5" onClick={() => setSelectedDrivers(defaults)}>Show top 5</Button></div> : <>
+      <ChartCard title="Lap-time distribution" description="The width shows where each driver’s cleaned lap times are concentrated; the white marker is the median.">
+        <LapTimeViolinChart series={lapTimeSeries} />
+      </ChartCard>
+
       <ChartCard title="Tyre strategy" description="Every stint is aligned to the same race-lap axis; vertical markers indicate pit stops.">
-        {!stintTimeline.length ? <ChartEmpty>No stint data is available for the selected drivers.</ChartEmpty> : <div className="overflow-x-auto pb-2"><div className="min-w-[720px] space-y-3">
+        {!stintTimeline.length ? <ChartEmpty>No stint data is available for the selected drivers.</ChartEmpty> : <div className="min-w-0 space-y-3">
           {stintTimeline.map((row) => <div key={row.driverNumber} className="flex items-center gap-3">
             <div className="w-20 shrink-0 text-sm font-semibold text-right" style={{ color: row.color }}>{drivers.find((driver) => driver.driver_number === row.driverNumber)?.name_acronym ?? row.driverName}</div>
             <div className="relative h-9 flex-1 bg-secondary/70 rounded overflow-hidden">
@@ -177,7 +182,7 @@ export function RaceStrategy() {
           </div>)}
           <div className="flex items-start gap-3"><div className="w-20 shrink-0" /><div className="relative h-5 flex-1 border-t border-border">{timelineTicks.map((lap) => <span key={lap} className="absolute top-1 -translate-x-1/2 text-[10px] text-muted-foreground" style={{ left: `${((lap - 1) / Math.max(totalLaps - 1, 1)) * 100}%` }}>{lap}</span>)}</div></div>
           <div className="flex flex-wrap gap-3 pl-[5.75rem] pt-1">{(Object.keys(TIRE_COLORS) as TireCompound[]).filter((compound) => filteredStints.some((stint) => (stint.compound ?? "UNKNOWN") === compound)).map((compound) => <span key={compound} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><span className="w-2.5 h-2.5 rounded-full border border-white/20" style={{ backgroundColor: TIRE_COLORS[compound] }} />{compound}</span>)}</div>
-        </div></div>}
+        </div>}
       </ChartCard>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -185,7 +190,7 @@ export function RaceStrategy() {
         <StrategyLineChart title="Position progression" description="End-of-lap running position, with P1 at the top of the chart." data={positionData} series={positionSeries} yFormatter={(value) => `P${value}`} tooltipFormatter={(value) => `P${value}`} empty="Position history is unavailable for the selected drivers." reversed position />
       </div>
 
-      <StrategyLineChart title="Tyre degradation by stint" description="Three-lap rolling pace change from each stint’s opening baseline; pit-out and obvious slow laps are removed." data={degradationData} series={degradation} xLabel="Tyre age (laps)" yLabel="Pace change" yFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(1)}s`} tooltipFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(3)}s`} empty="There are not enough clean laps to calculate degradation." zeroLine degradationCompounds={degradation.map((line) => [line.key, line.compound])} fullWidth />
+      <StrategyLineChart title="Lap times" description="Completed non-pit laps for each selected driver; abnormally slow laps are excluded." data={lapTimeData} series={lapTimeSeries} yLabel="Lap time" yFormatter={formatLapTime} tooltipFormatter={formatLapTime} empty="Lap-time data is unavailable for the selected drivers." fullWidth />
 
       <section className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="p-4 md:p-6 border-b border-border"><h2 className="text-lg text-card-foreground">Pit-stop summary</h2><p className="text-sm text-muted-foreground mt-1">Pit-lane transit and stationary time are reported separately when available.</p></div>
@@ -209,11 +214,9 @@ interface StrategyLineChartProps {
   title: string; description: string; data: WideChartPoint[]; series: StrategyLineSeries[];
   yFormatter: (value: number) => string; tooltipFormatter: (value: number) => string; empty: string;
   xLabel?: string; yLabel?: string; zeroLine?: boolean; reversed?: boolean; position?: boolean; fullWidth?: boolean;
-  degradationCompounds?: Array<[string, TireCompound]>;
 }
 
-function StrategyLineChart({ title, description, data, series, yFormatter, tooltipFormatter, empty, xLabel = "Race lap", yLabel, zeroLine, reversed, position, fullWidth, degradationCompounds = [] }: StrategyLineChartProps) {
-  const compoundMap = new Map(degradationCompounds);
+function StrategyLineChart({ title, description, data, series, yFormatter, tooltipFormatter, empty, xLabel = "Race lap", yLabel, zeroLine, reversed, position, fullWidth }: StrategyLineChartProps) {
   return <ChartCard title={title} description={description}>{!data.length ? <ChartEmpty>{empty}</ChartEmpty> : <ResponsiveContainer width="100%" height={fullWidth ? 380 : 340}>
     <LineChart data={data} margin={{ top: 8, right: 18, left: 8, bottom: 12 }}>
       <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
@@ -223,9 +226,7 @@ function StrategyLineChart({ title, description, data, series, yFormatter, toolt
       <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(value) => `${xLabel === "Race lap" ? "Lap" : "Tyre age"} ${value}`} formatter={(value: number, name: string) => [tooltipFormatter(value), name]} />
       <Legend wrapperStyle={{ paddingTop: 12 }} />
       {series.map((line) => {
-        const compound = compoundMap.get(line.key);
-        const dash = compound === "MEDIUM" ? "7 3" : compound === "HARD" ? "3 3" : compound && compound !== "SOFT" ? "10 3 2 3" : undefined;
-        return <Line key={line.key} type={position ? "stepAfter" : compound ? "monotone" : "linear"} dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} strokeDasharray={dash} dot={false} connectNulls={false} />;
+        return <Line key={line.key} type={position ? "stepAfter" : "linear"} dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} dot={false} connectNulls={false} />;
       })}
     </LineChart>
   </ResponsiveContainer>}</ChartCard>;

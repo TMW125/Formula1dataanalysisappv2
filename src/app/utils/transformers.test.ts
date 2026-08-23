@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Lap, OpenF1Driver, Position, SessionResult, Stint } from "../types/openf1";
+import type { Lap, OpenF1Driver, Pit, Position, SessionResult, Stint } from "../types/openf1";
 import {
   buildCumulativeDeltaSeries,
   buildDefaultDriverSelection,
   buildDegradationSeries,
+  buildLapTimeSeries,
   buildPositionSeries,
 } from "./transformers";
 
@@ -63,6 +64,22 @@ describe("race strategy transformers", () => {
     expect(built.series.find((line) => line.driverNumber === 2)?.values).toEqual([
       { lap: 1, value: 0 },
       { lap: 2, value: 1 },
+    ]);
+  });
+
+  it("builds lap-time series for the selected drivers", () => {
+    const drivers = [driver(1, "ONE"), driver(2, "TWO")];
+    const pitOutLap = { ...lap(1, 3, 110), is_pit_out_lap: true };
+    const laps = [lap(1, 2, 91.5), lap(2, 1, 93), lap(1, 1, 90), pitOutLap, lap(1, 4, 115), lap(1, 5, 140), lap(2, 2, 0)];
+    const pits: Pit[] = [{
+      driver_number: 1, lap_number: 4, pit_duration: null, lane_duration: 20,
+      stop_duration: 2.5, date: "2026-01-01T00:04:00Z", session_key: 10, meeting_key: 20,
+    }];
+    const built = buildLapTimeSeries(laps, pits, drivers, [1]);
+    expect(built).toHaveLength(1);
+    expect(built[0].values).toEqual([
+      { lap: 1, value: 90 },
+      { lap: 2, value: 91.5 },
     ]);
   });
 

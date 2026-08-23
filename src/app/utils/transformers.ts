@@ -469,6 +469,43 @@ function driverDetails(drivers: OpenF1Driver[], driverNumber: number) {
   };
 }
 
+export function buildLapTimeSeries(
+  laps: Lap[],
+  pits: Pit[],
+  drivers: OpenF1Driver[],
+  selectedDriverNumbers: number[]
+): StrategyLineSeries[] {
+  return selectedDriverNumbers.map((driverNumber) => {
+    const details = driverDetails(drivers, driverNumber);
+    const pitLapNumbers = new Set(
+      pits
+        .filter((pit) => pit.driver_number === driverNumber)
+        .map((pit) => pit.lap_number)
+    );
+    const validLaps = laps
+      .filter(
+        (lap): lap is Lap & { lap_duration: number } =>
+          lap.driver_number === driverNumber &&
+          lap.lap_duration != null &&
+          lap.lap_duration > 0 &&
+          !lap.is_pit_out_lap &&
+          !pitLapNumbers.has(lap.lap_number)
+      );
+    const center = median(validLaps.map((lap) => lap.lap_duration));
+    const deviations = validLaps.map((lap) => Math.abs(lap.lap_duration - center));
+    const slowLapThreshold = Math.max(3, median(deviations) * 3);
+    return {
+      key: `lap-time-${driverNumber}`,
+      driverNumber,
+      ...details,
+      values: validLaps
+        .filter((lap) => lap.lap_duration <= center + slowLapThreshold)
+        .sort((a, b) => a.lap_number - b.lap_number)
+        .map((lap) => ({ lap: lap.lap_number, value: lap.lap_duration })),
+    };
+  });
+}
+
 export function buildCumulativeDeltaSeries(
   laps: Lap[],
   drivers: OpenF1Driver[],
