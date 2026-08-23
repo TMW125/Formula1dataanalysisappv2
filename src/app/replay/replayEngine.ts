@@ -13,13 +13,17 @@ type Timed = { date: string };
 
 export const LOCATION_STALE_MS = 5_000;
 export const DNF_FADE_MS = 10_000;
+const REPLAY_END_GRACE_MS = 10_000;
 const RETIREMENT_MESSAGE = /\b(retired|stopped|out of the race|dnf)\b/i;
+const SESSION_END_MESSAGE = /\b(?:session|race|sprint)\s+(?:has\s+)?(?:ended|finished|completed)\b/i;
+const CHEQUERED_FLAG = /^CHEQUERED$/i;
 const YELLOW_FLAG = /^(?:DOUBLE\s+)?YELLOW$/i;
 const PIT_ENTRY_MESSAGE = /\bentered\s+(?:the\s+)?pit(?:s|\s+lane)?\b/i;
 const EXCLUDED_TIMELINE_TITLES = new Set(["other", "blue", "clear", "black and white"]);
 
 export interface ReplayIndex {
   dataset: ReplayDataset;
+  replayEnd: number;
   positions: Map<number, Position[]>;
   intervals: Map<number, Interval[]>;
   laps: Map<number, Lap[]>;
@@ -72,6 +76,64 @@ function scalarResultValue(
 ): number | string | null {
   if (!Array.isArray(value)) return value;
   return [...value].reverse().find((part) => part !== null) ?? null;
+}
+
+function latestTimestamp(values: number[]): number {
+  return values.reduce((latest, value) => Number.isFinite(value) ? Math.max(latest, value) : latest, -Infinity);
+}
+
+function isTerminalRaceControlEvent(event: RaceControlEvent): boolean {
+  return CHEQUERED_FLAG.test((event.flag ?? "").trim())
+    || (event.category.trim().toLowerCase() === "sessionstatus" && SESSION_END_MESSAGE.test(event.message));
+}
+
+function applyReplayEndGrace(latest: number, sessionEnd: number): number {
+  if (latest <= sessionEnd) return Math.min(sessionEnd, latest + REPLAY_END_GRACE_MS);
+  return latest + REPLAY_END_GRACE_MS;
+}
+
+/**
+ * Find the useful end of a replay from recorded timing data rather than the
+ * nominal session window. The API's session end can be a scheduled two-hour
+ * boundary, while timing data may continue after it (for example after a red
+ * flag) or finish well before it.
+ */
+export function getReplayEnd(dataset: ReplayDataset): number {
+  const sessionStart = Date.parse(dataset.session.date_start);
+  const sessionEnd = Date.parse(dataset.session.date_end);
+  const fallbackEnd = Number.isFinite(sessionEnd) && sessionEnd > sessionStart ? sessionEnd : sessionStart;
+  if (!Number.isFinite(sessionStart)) return fallbackEnd;
+
+  const timestamps: number[] = [];
+  const add = (value: number) => {
+    if (Number.isFinite(value)) timestamps.push(value);
+  };
+  dataset.positions.forEach((item) => add(Date.parse(item.date)));
+  dataset.intervals.forEach((item) => add(Date.parse(item.date)));
+  dataset.pits.forEach((item) => add(Date.parse(item.date)));
+  dataset.raceControl.forEach((item) => add(Date.parse(item.date)));
+  dataset.overtakes.forEach((item) => add(Date.parse(item.date)));
+  dataset.teamRadio.forEach((item) => add(Date.parse(item.date)));
+  dataset.laps.forEach((item) => {
+    const lapStart = Date.parse(item.date_start);
+    add(lapStart);
+    if (item.lap_duration !== null && item.lap_duration > 0) add(lapStart + item.lap_duration * 1000);
+  });
+
+  const terminalEnd = latestTimestamp(
+    dataset.raceControl.filter(isTerminalRaceControlEvent).map((item) => Date.parse(item.date))
+  );
+  if (terminalEnd > sessionStart) return applyReplayEndGrace(terminalEnd, sessionEnd);
+
+  // Locations are lazy-loaded, so use them only when the full-session timing
+  // sources above contain no progress at all.
+  if (latestTimestamp(timestamps) <= sessionStart) {
+    dataset.locations.forEach((item) => add(Date.parse(item.date)));
+  }
+
+  const latest = latestTimestamp(timestamps);
+  if (!Number.isFinite(latest) || latest <= sessionStart) return fallbackEnd;
+  return applyReplayEndGrace(latest, sessionEnd);
 }
 
 export function formatReplayGap(value: number | string | null, leader = false): string {
@@ -203,6 +265,7 @@ export function createReplayIndex(dataset: ReplayDataset): ReplayIndex {
   }
   return {
     dataset,
+    replayEnd: getReplayEnd(dataset),
     positions: groupByDriver<Position>(dataset.positions, timestamp),
     intervals: groupByDriver<Interval>(dataset.intervals, timestamp),
     laps: groupByDriver<Lap>(dataset.laps, (lap) => Date.parse(lap.date_start)),
@@ -226,7 +289,7 @@ function latestFlag(events: RaceControlEvent[], target: number): string {
 export function buildReplayFrame(index: ReplayIndex, target: number): ReplayFrame {
   const { dataset } = index;
   const sessionStart = Date.parse(dataset.session.date_start);
-  const sessionEnd = Date.parse(dataset.session.date_end);
+  const sessionEnd = index.replayEnd;
   const replayTime = Math.min(sessionEnd, Math.max(sessionStart, target));
   const visibleEventCount = upperBound(index.events, replayTime, (event) => event.timestamp);
   const isRace = dataset.session.session_type === "Race" || dataset.session.session_type === "Sprint";

@@ -46,8 +46,10 @@ export function DriverComparison() {
   const colorB = toHexColor(driverB?.team_colour);
 
   // Car data for each driver
-  const { data: carDataA, loading: carALoading } = useCarDataForDriver(effectiveA);
-  const { data: carDataB, loading: carBLoading } = useCarDataForDriver(effectiveB);
+  // Telemetry is intentionally disabled until each comparison slot has been
+  // explicitly selected; the driver list and lap data remain lightweight.
+  const { data: carDataA, loading: carALoading } = useCarDataForDriver(driverANum);
+  const { data: carDataB, loading: carBLoading } = useCarDataForDriver(driverBNum);
 
   const telA = useMemo(() => buildCarTelemetry(carDataA), [carDataA]);
   const telB = useMemo(() => buildCarTelemetry(carDataB), [carDataB]);

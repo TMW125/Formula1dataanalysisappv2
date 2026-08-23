@@ -62,9 +62,10 @@ export function DataExplorer() {
   const sessionKey = useSelectedSessionKey();
   const [endpoint, setEndpoint] = useState<ExplorerEndpoint>("laps");
   const [driverNumber, setDriverNumber] = useState<number | null>(null);
+  const [driverOptionsRequested, setDriverOptionsRequested] = useState(false);
   const [viewMode, setViewMode] = useState<"json" | "table">("table");
 
-  const { data: drivers } = useDriversData();
+  const { data: drivers } = useDriversData({ enabled: driverOptionsRequested });
   const sortedDrivers = useMemo(
     () =>
       [...drivers].sort(
@@ -140,6 +141,7 @@ export function DataExplorer() {
             </label>
             <select
               value={driverNumber ?? ""}
+              onFocus={() => setDriverOptionsRequested(true)}
               onChange={(e) => setDriverNumber(e.target.value ? Number(e.target.value) : null)}
               disabled={NO_DRIVER_FILTER.has(endpoint)}
               className="w-full bg-input text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-40 disabled:cursor-not-allowed"

@@ -14,10 +14,11 @@ import {
 } from "lucide-react";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { ReplayTrackMap } from "../components/ReplayTrackMap";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { useReplayController, REPLAY_SPEEDS, type ReplaySpeed } from "../hooks/useReplayController";
 import { useReplayData } from "../hooks/useReplayData";
 import { useCircuitInfo, useCurrentSession } from "../hooks/useSessionData";
-import { buildReplayFrame, createReplayIndex, isTimelineMarkerEvent } from "../replay/replayEngine";
+import { buildReplayFrame, createReplayIndex, getReplayEnd, isTimelineMarkerEvent } from "../replay/replayEngine";
 import type { ReplayDriverState, ReplayEvent } from "../replay/types";
 import { TIRE_COLORS } from "../types/ui";
 import { toHexColor } from "../utils/transformers";
@@ -35,6 +36,13 @@ function eventColor(kind: ReplayEvent["kind"]): string {
   if (kind === "pit") return "#FFD700";
   if (kind === "overtake") return "#27F4D2";
   return "#0090ff";
+}
+
+function eventKindLabel(kind: ReplayEvent["kind"]): string {
+  if (kind === "control") return "Race control";
+  if (kind === "pit") return "Pit stop";
+  if (kind === "overtake") return "Overtake";
+  return "Team radio";
 }
 
 function Classification({ drivers }: { drivers: ReplayDriverState[] }) {
@@ -141,18 +149,35 @@ export function ReplayControls(props: ControlsProps) {
     <section className="rounded-lg border border-border bg-card p-4" aria-label="Replay controls">
       <div className="relative mb-3 pt-3">
         {props.events.map((event) => (
-          <button
-            key={event.id}
-            type="button"
-            disabled={props.disabled}
-            onClick={() => props.onSeek(event.timestamp)}
-            className="absolute top-0 z-10 flex h-3 w-4 -translate-x-1/2 cursor-pointer items-start justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:cursor-not-allowed"
-            style={{ left: `${Math.min(100, Math.max(0, ((event.timestamp - props.start) / duration) * 100))}%` }}
-            title={event.title}
-            aria-label={`Jump to ${event.title} at ${formatDuration(event.timestamp - props.start)}`}
-          >
-            <span className="h-2 w-0.5" style={{ backgroundColor: eventColor(event.kind) }} aria-hidden="true" />
-          </button>
+          <Tooltip key={event.id}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                disabled={props.disabled}
+                onClick={() => props.onSeek(event.timestamp)}
+                className="absolute top-0 z-10 flex h-3 w-4 -translate-x-1/2 cursor-pointer items-start justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:cursor-not-allowed"
+                style={{ left: `${Math.min(100, Math.max(0, ((event.timestamp - props.start) / duration) * 100))}%` }}
+                aria-label={`Jump to ${event.title} at ${formatDuration(event.timestamp - props.start)}`}
+              >
+                <span className="h-2 w-0.5" style={{ backgroundColor: eventColor(event.kind) }} aria-hidden="true" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={8} className="w-64 max-w-[calc(100vw-2rem)] border border-border bg-popover p-3 text-popover-foreground shadow-xl">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: eventColor(event.kind) }} aria-hidden="true" />
+                  <span>{eventKindLabel(event.kind)}</span>
+                  <span className="ml-auto font-mono normal-case tracking-normal">{formatDuration(event.timestamp - props.start)}</span>
+                </div>
+                <p className="text-sm font-semibold leading-tight">{event.title}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">{event.detail}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span>{event.lapNumber ? `Lap ${event.lapNumber}` : "Lap —"}</span>
+                  {event.driverNumber != null ? <span>Car {event.driverNumber}</span> : null}
+                </div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         ))}
         <input
           type="range"
@@ -193,11 +218,20 @@ export function LiveReplay() {
   const completed = validDates && rawEnd <= Date.now();
   const replaySession = selectedSession && completed ? selectedSession : null;
   const canAdvanceRef = useRef(false);
-  const controller = useReplayController(validDates ? rawStart : 0, validDates ? rawEnd : 0, canAdvanceRef);
+  const replayEndRef = useRef(0);
+  const replaySessionKeyRef = useRef<number | null>(null);
+  const selectedSessionKey = selectedSession?.session_key ?? null;
+  if (replaySessionKeyRef.current !== selectedSessionKey) {
+    replaySessionKeyRef.current = selectedSessionKey;
+    replayEndRef.current = validDates ? rawEnd : 0;
+  }
+  const controller = useReplayController(validDates ? rawStart : 0, validDates ? rawEnd : 0, canAdvanceRef, replayEndRef);
   const currentTimeRef = useRef(controller.currentTime);
   currentTimeRef.current = controller.currentTime;
   const replayData = useReplayData(replaySession, controller.currentTime);
   canAdvanceRef.current = Boolean(replayData.dataset && replayData.locationReady);
+  const replayEnd = replayData.dataset ? getReplayEnd(replayData.dataset) : rawEnd;
+  replayEndRef.current = replayEnd;
   const replayIndex = useMemo(() => replayData.dataset ? createReplayIndex(replayData.dataset) : null, [replayData.dataset]);
   const frame = useMemo(() => replayIndex ? buildReplayFrame(replayIndex, controller.currentTime) : null, [replayIndex, controller.currentTime]);
   const allEvents = replayIndex?.events ?? [];
@@ -207,6 +241,28 @@ export function LiveReplay() {
   );
   const [activeRadio, setActiveRadio] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // These sources are visible in the replay shell, but they are requested only
+  // after the six core sources have produced the first replay dataset. The
+  // hook queues them one at a time to avoid an optional-endpoint burst.
+  useEffect(() => {
+    if (!replayData.dataset) return;
+    replayData.loadOptional?.("weather");
+    replayData.loadOptional?.("raceControl");
+    if (selectedSession?.session_type === "Race" || selectedSession?.session_type === "Sprint") {
+      replayData.loadOptional?.("intervals");
+      replayData.loadOptional?.("startingGrid");
+    }
+  }, [replayData.dataset?.session.session_key, replayData.loadOptional, selectedSession?.session_type]);
+
+  // Radio and overtake markers are only useful once the user starts moving
+  // through the replay, so keep those two larger optional sources deferred.
+  const replayHasProgress = controller.playing || controller.currentTime > rawStart;
+  useEffect(() => {
+    if (!replayData.dataset || !replayHasProgress) return;
+    replayData.loadOptional?.("teamRadio");
+    replayData.loadOptional?.("overtakes");
+  }, [replayData.dataset?.session.session_key, replayData.loadOptional, replayHasProgress]);
 
   const playRadio = useCallback((url: string) => {
     if (!audioRef.current) return;
@@ -224,6 +280,10 @@ export function LiveReplay() {
   }, [selectedSession?.session_key]);
 
   useEffect(() => {
+    if (controller.currentTime > replayEnd) controller.seek(replayEnd);
+  }, [controller.currentTime, controller.seek, replayEnd]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, button, select, textarea, audio")) return;
@@ -231,11 +291,11 @@ export function LiveReplay() {
       else if (event.code === "ArrowLeft") controller.seek(currentTimeRef.current - 5_000);
       else if (event.code === "ArrowRight") controller.seek(currentTimeRef.current + 5_000);
       else if (event.code === "Home") controller.seek(rawStart);
-      else if (event.code === "End") controller.seek(rawEnd);
+      else if (event.code === "End") controller.seek(replayEnd);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [controller.seek, controller.toggle, rawStart, rawEnd]);
+  }, [controller.seek, controller.toggle, rawStart, replayEnd, rawEnd]);
 
   if (!selectedSession) {
     return <div className="p-6"><div className="flex h-64 flex-col items-center justify-center rounded-lg border border-border bg-card text-center"><RotateCcw className="mb-3 h-10 w-10 text-muted-foreground" /><h1 className="text-xl">No session selected</h1><p className="mt-2 text-sm text-muted-foreground">Choose a season, race weekend, and session above to load a replay.</p></div></div>;
@@ -253,7 +313,7 @@ export function LiveReplay() {
       <audio ref={audioRef} onEnded={() => setActiveRadio(null)} className="hidden" />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div><div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-primary"><span className="h-2 w-2 rounded-full bg-primary" />Live Replay</div><h1 className="text-3xl tracking-tight">{selectedSession.session_name}</h1><p className="text-sm text-muted-foreground">{selectedSession.location} · {selectedSession.circuit_short_name}</p></div>
-        <div className="text-right"><p className="font-mono text-2xl font-bold">{formatDuration(controller.currentTime - rawStart)}</p><p className="text-xs uppercase tracking-wider text-muted-foreground">Lap {frame?.currentLap || "—"} · {controller.playing ? replayData.buffering ? "Buffering" : "Playing" : controller.currentTime >= rawEnd ? "Complete" : "Paused"}</p></div>
+        <div className="text-right"><p className="font-mono text-2xl font-bold">{formatDuration(controller.currentTime - rawStart)}</p><p className="text-xs uppercase tracking-wider text-muted-foreground">Lap {frame?.currentLap || "—"} · {controller.playing ? replayData.buffering ? "Buffering" : "Playing" : controller.currentTime >= replayEnd ? "Complete" : "Paused"}</p></div>
       </header>
 
       {replayData.loading && !replayData.dataset ? <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card"><LoadingSpinner /><p className="text-sm text-muted-foreground">Loading timing, events, and opening track positions…</p></div> : null}
@@ -272,7 +332,7 @@ export function LiveReplay() {
             </section>
             <Classification drivers={frame.drivers} />
           </div>
-          <ReplayControls start={rawStart} end={rawEnd} current={controller.currentTime} playing={controller.playing} buffering={replayData.buffering} speed={controller.speed} events={timelineEvents} disabled={!replayData.locationReady} onToggle={controller.toggle} onRestart={controller.restart} onSeek={controller.seek} onSpeed={controller.setSpeed} />
+          <ReplayControls start={rawStart} end={replayEnd} current={controller.currentTime} playing={controller.playing} buffering={replayData.buffering} speed={controller.speed} events={timelineEvents} disabled={!replayData.locationReady} onToggle={controller.toggle} onRestart={controller.restart} onSeek={controller.seek} onSpeed={controller.setSpeed} />
           <EventFeed events={frame.events} sessionStart={rawStart} activeRadio={activeRadio} onRadio={playRadio} />
         </>
       ) : null}

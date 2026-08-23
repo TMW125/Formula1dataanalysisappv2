@@ -77,4 +77,13 @@ export interface ReplayLoadState {
   buffering: boolean;
   errors: Record<string, string>;
   retry: () => void;
+  loadOptional: (endpoint: ReplayOptionalDataKey) => void;
 }
+
+export type ReplayOptionalDataKey =
+  | "weather"
+  | "raceControl"
+  | "teamRadio"
+  | "intervals"
+  | "overtakes"
+  | "startingGrid";

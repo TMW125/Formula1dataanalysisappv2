@@ -1,15 +1,21 @@
 /**
  * Session-scoped data hooks.
  *
- * Every hook reads `selectedSessionKey` from global context and automatically
- * re-fetches when it changes.  All hooks return `{ data, loading, error }`.
- *
- * IMPORTANT: hooks return an empty array (not null) when no session is
- * selected, so consumers can safely call `.length`, `.map()`, etc.
+ * Every OpenF1 request is backed by a TanStack Query. The query key contains
+ * the complete request identity, so pages can safely mount/unmount while the
+ * same result and in-flight request remain shared in the app cache.
  */
 
-import { useEffect, useState } from "react";
-import { useF1Data, useMeetings, useSelectedMeetingKey, useSelectedSessionKey, useSessions } from "../context/F1DataContext";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  useF1Data,
+  useMeetings,
+  useSelectedMeetingKey,
+  useSelectedSeason,
+  useSelectedSessionKey,
+  useSessions,
+} from "../context/F1DataContext";
 import {
   getCarData,
   getChampionshipDrivers,
@@ -44,178 +50,148 @@ import type {
   Stint,
   Weather,
 } from "../types/openf1";
+import { QUERY_GC_TIME, QUERY_STALE_TIME } from "../queryClient";
+import { explorerEndpointKey, openF1QueryKey, openF1QueryKeys, type OpenF1Endpoint } from "../queryKeys";
 
-// ─── Internal helper ──────────────────────────────────────────────────────────
+// ─── Shared result shape ──────────────────────────────────────────────────────
 
-interface FetchState<T> {
+export interface FetchState<T> {
   data: T[];
   loading: boolean;
   error: string | null;
+  refetch: () => void;
 }
 
-function useFetchList<T>(
-  fetcher: (sessionKey: number) => Promise<T[]>,
-  sessionKey: number | null
+function errorMessage(error: unknown): string | null {
+  return error instanceof Error ? error.message : error ? "Unknown error" : null;
+}
+
+function emptyQueryKey(endpoint: Exclude<OpenF1Endpoint, "meetings" | "sessions">) {
+  return openF1QueryKey({ endpoint });
+}
+
+function useSessionQuery<T>(
+  endpoint: Exclude<OpenF1Endpoint, "meetings" | "sessions">,
+  fetcher: (sessionKey: number, signal: AbortSignal) => Promise<T[]>,
+  enabledOverride = true,
 ): FetchState<T> {
-  const [data, setData] = useState<T[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const season = useSelectedSeason();
+  const meetingKey = useSelectedMeetingKey();
+  const sessionKey = useSelectedSessionKey();
+  const enabled = enabledOverride && sessionKey !== null && meetingKey !== null;
+  const query = useQuery<T[], Error>({
+    queryKey: enabled
+      ? openF1QueryKeys.session(season, meetingKey, sessionKey, endpoint)
+      : emptyQueryKey(endpoint),
+    queryFn: ({ signal }) => fetcher(sessionKey!, signal),
+    enabled,
+    staleTime: QUERY_STALE_TIME.standard,
+    gcTime: QUERY_GC_TIME.standard,
+  });
 
-  useEffect(() => {
-    if (!sessionKey) {
-      setData([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    fetcher(sessionKey)
-      .then((result) => {
-        if (!cancelled) {
-          setData(result);
-          setLoading(false);
-        }
-      })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setError(err.message ?? "Unknown error");
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionKey]); // fetcher reference intentionally excluded – it's always stable
-
-  return { data, loading, error };
+  return {
+    data: query.data ?? [],
+    loading: enabled && query.isPending,
+    error: enabled ? errorMessage(query.error) : null,
+    refetch: () => { void query.refetch(); },
+  };
 }
 
 // ─── Current session object ───────────────────────────────────────────────────
 
-/**
- * Returns the full `Session` object for the currently selected session key,
- * or `null` when nothing is selected.
- */
+/** Returns the full Session object for the currently selected session key. */
 export function useCurrentSession(): Session | null {
   const { state } = useF1Data();
   const { sessions } = useSessions();
-  return (
-    sessions.find((s) => s.session_key === state.selectedSessionKey) ?? null
-  );
+  return sessions.find((session) => session.session_key === state.selectedSessionKey) ?? null;
 }
 
 // ─── Per-resource hooks ───────────────────────────────────────────────────────
 
 /** All drivers who participated in the current session. */
-export function useDriversData(): FetchState<OpenF1Driver> {
-  const sessionKey = useSelectedSessionKey();
-  return useFetchList(getDrivers, sessionKey);
+export function useDriversData(options: { enabled?: boolean } = {}): FetchState<OpenF1Driver> {
+  return useSessionQuery(
+    "drivers",
+    (sessionKey, signal) => getDrivers(sessionKey, undefined, signal),
+    options.enabled ?? true,
+  );
 }
 
 /** All lap records for the current session. */
 export function useLapsData(): FetchState<Lap> {
-  const sessionKey = useSelectedSessionKey();
-  return useFetchList(getLaps, sessionKey);
+  return useSessionQuery("laps", (sessionKey, signal) => getLaps(sessionKey, undefined, signal));
 }
 
 /** Weather samples for the current session. */
 export function useWeatherData(): FetchState<Weather> {
-  const sessionKey = useSelectedSessionKey();
-  return useFetchList(getWeather, sessionKey);
+  return useSessionQuery("weather", (sessionKey, signal) => getWeather(sessionKey, signal));
 }
 
 /** Tyre stints for the current session. */
 export function useStintsData(): FetchState<Stint> {
-  const sessionKey = useSelectedSessionKey();
-  return useFetchList(getStints, sessionKey);
+  return useSessionQuery("stints", (sessionKey, signal) => getStints(sessionKey, undefined, signal));
 }
 
 /** Pit stop records for the current session. */
 export function usePitsData(): FetchState<Pit> {
-  const sessionKey = useSelectedSessionKey();
-  return useFetchList(getPits, sessionKey);
+  return useSessionQuery("pits", (sessionKey, signal) => getPits(sessionKey, undefined, signal));
 }
 
 /** Position history for the current session. */
 export function usePositionsData(): FetchState<Position> {
-  const sessionKey = useSelectedSessionKey();
-  return useFetchList(getPositions, sessionKey);
+  return useSessionQuery("positions", (sessionKey, signal) => getPositions(sessionKey, undefined, signal));
 }
 
 /** Interval/gap data for the current session. */
 export function useIntervalsData(): FetchState<Interval> {
-  const sessionKey = useSelectedSessionKey();
-  return useFetchList(getIntervals, sessionKey);
+  return useSessionQuery("intervals", (sessionKey, signal) => getIntervals(sessionKey, undefined, signal));
 }
 
 /** Race control messages for the current session. */
 export function useRaceControlData(): FetchState<RaceControlEvent> {
-  const sessionKey = useSelectedSessionKey();
-  return useFetchList(getRaceControl, sessionKey);
+  return useSessionQuery("race_control", (sessionKey, signal) => getRaceControl(sessionKey, signal));
 }
 
 /** Final session results (positions, gaps, DNF/DNS/DSQ). */
 export function useSessionResultsData(): FetchState<SessionResult> {
-  const sessionKey = useSelectedSessionKey();
-  return useFetchList(getSessionResults, sessionKey);
+  return useSessionQuery("session_result", (sessionKey, signal) => getSessionResults(sessionKey, signal));
 }
 
 // ─── Driver-scoped car data ───────────────────────────────────────────────────
 
-/**
- * Car telemetry for a single driver in the current session.
- * Fetching is skipped when `driverNumber` is null.
- */
-export function useCarDataForDriver(
-  driverNumber: number | null
-): FetchState<CarData> {
+/** Car telemetry for one selected driver in the current session. */
+export function useCarDataForDriver(driverNumber: number | null): FetchState<CarData> {
+  const season = useSelectedSeason();
+  const meetingKey = useSelectedMeetingKey();
   const sessionKey = useSelectedSessionKey();
-  const [data, setData] = useState<CarData[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const enabled = sessionKey !== null && meetingKey !== null && driverNumber !== null;
+  const query = useQuery<CarData[], Error>({
+    queryKey: enabled
+      ? openF1QueryKeys.session(season, meetingKey, sessionKey, "car_data", driverNumber)
+      : openF1QueryKey({
+          season,
+          meetingKey,
+          sessionKey,
+          endpoint: "car_data",
+          driverNumber,
+        }),
+    queryFn: ({ signal }) => getCarData(sessionKey!, driverNumber!, signal),
+    enabled,
+    staleTime: QUERY_STALE_TIME.historical,
+    gcTime: QUERY_GC_TIME.location,
+  });
 
-  useEffect(() => {
-    if (!sessionKey || driverNumber === null) {
-      setData([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    getCarData(sessionKey, driverNumber)
-      .then((result) => {
-        if (!cancelled) {
-          setData(result);
-          setLoading(false);
-        }
-      })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setError(err.message ?? "Unknown error");
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionKey, driverNumber]);
-
-  return { data, loading, error };
+  return {
+    data: query.data ?? [],
+    loading: enabled && query.isPending,
+    error: enabled ? errorMessage(query.error) : null,
+    refetch: () => { void query.refetch(); },
+  };
 }
 
-// ─── DataExplorer generic hook ────────────────────────────────────────────────
+// ─── Data Explorer generic hook ───────────────────────────────────────────────
 
-type ExplorerEndpoint =
+export type ExplorerEndpoint =
   | "laps"
   | "car_data"
   | "drivers"
@@ -235,129 +211,126 @@ type ExplorerEndpoint =
   | "meetings"
   | "sessions";
 
+const NO_DRIVER_FILTER: ReadonlySet<ExplorerEndpoint> = new Set([
+  "weather",
+  "race_control",
+  "session_result",
+  "overtakes",
+  "starting_grid",
+  "championship_drivers",
+  "championship_teams",
+  "meetings",
+  "sessions",
+]);
+
+function explorerCanFetch(endpoint: ExplorerEndpoint, sessionKey: number | null, meetingKey: number | null) {
+  return endpoint === "meetings" || endpoint === "sessions" ? meetingKey !== null : sessionKey !== null;
+}
+
 /**
- * Fetches data for a given endpoint in the current session.
- * Used by the DataExplorer page.  Does NOT auto-fetch on mount; call
- * `refetch()` to trigger a fetch.
+ * Data Explorer is intentionally disabled until its returned `refetch` action
+ * is called. Changing endpoint or driver resets that request gate, so merely
+ * browsing the selector never starts a new OpenF1 request.
  */
 export function useExplorerData(
   endpoint: ExplorerEndpoint,
-  driverNumber: number | null
-): FetchState<Record<string, unknown>> & { refetch: () => void } {
+  driverNumber: number | null,
+): FetchState<Record<string, unknown>> {
+  const season = useSelectedSeason();
   const sessionKey = useSelectedSessionKey();
+  const selectedMeetingKey = useSelectedMeetingKey();
   const currentSession = useCurrentSession();
-  const [data, setData] = useState<Record<string, unknown>[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [trigger, setTrigger] = useState(0);
-
-  const refetch = () => setTrigger((n) => n + 1);
+  const meetingKey = currentSession?.meeting_key ?? selectedMeetingKey;
+  const effectiveDriverNumber = NO_DRIVER_FILTER.has(endpoint) ? null : driverNumber;
+  const canonicalEndpoint = explorerEndpointKey(endpoint);
+  const queryKey = useMemo(() => {
+    if (endpoint === "meetings" || endpoint === "sessions") {
+      return openF1QueryKey({ season, meetingKey, endpoint: canonicalEndpoint });
+    }
+    return openF1QueryKey({
+      season,
+      meetingKey,
+      sessionKey,
+      endpoint: canonicalEndpoint,
+      driverNumber: effectiveDriverNumber,
+    });
+  }, [canonicalEndpoint, effectiveDriverNumber, endpoint, meetingKey, season, sessionKey]);
+  const queryHash = JSON.stringify(queryKey);
+  const [requestedKey, setRequestedKey] = useState<string | null>(null);
+  const canFetch = explorerCanFetch(endpoint, sessionKey, meetingKey);
 
   useEffect(() => {
-    if (!sessionKey || trigger === 0) return;
+    setRequestedKey(null);
+  }, [queryHash]);
 
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
+  const query = useQuery<unknown[], Error>({
+    queryKey,
+    queryFn: ({ signal }) => {
+      const driver = effectiveDriverNumber ?? undefined;
+      switch (endpoint) {
+        case "laps": return getLaps(sessionKey!, driver, signal);
+        case "car_data": return getCarData(sessionKey!, driver, signal);
+        case "drivers": return getDrivers(sessionKey!, driver, signal);
+        case "positions": return getPositions(sessionKey!, driver, signal);
+        case "stints": return getStints(sessionKey!, driver, signal);
+        case "weather": return getWeather(sessionKey!, signal);
+        case "intervals": return getIntervals(sessionKey!, driver, signal);
+        case "pit": return getPits(sessionKey!, driver, signal);
+        case "race_control": return getRaceControl(sessionKey!, signal);
+        case "session_result": return getSessionResults(sessionKey!, signal);
+        case "location": return getLocation(sessionKey!, driver, signal);
+        case "team_radio": return getTeamRadio(sessionKey!, driver, signal);
+        case "overtakes": return getOvertakes(sessionKey!, signal);
+        case "starting_grid": return getStartingGrid(sessionKey!, signal);
+        case "championship_drivers": return getChampionshipDrivers(sessionKey!, signal);
+        case "championship_teams": return getChampionshipTeams(sessionKey!, signal);
+        case "meetings": return meetingKey === null ? Promise.resolve([]) : getMeetingByKey(meetingKey);
+        case "sessions": return meetingKey === null ? Promise.resolve([]) : getSessionsByMeeting(meetingKey);
+      }
+    },
+    enabled: canFetch && requestedKey === queryHash,
+    staleTime: QUERY_STALE_TIME.standard,
+    gcTime: QUERY_GC_TIME.standard,
+  });
 
-    const meetingKey = currentSession?.meeting_key;
-    const fetchers: Record<ExplorerEndpoint, () => Promise<unknown[]>> = {
-      laps: () => getLaps(sessionKey, driverNumber ?? undefined),
-      car_data: () => getCarData(sessionKey, driverNumber ?? undefined),
-      drivers: () => getDrivers(sessionKey, driverNumber ?? undefined),
-      positions: () => getPositions(sessionKey, driverNumber ?? undefined),
-      stints: () => getStints(sessionKey, driverNumber ?? undefined),
-      weather: () => getWeather(sessionKey),
-      intervals: () => getIntervals(sessionKey, driverNumber ?? undefined),
-      pit: () => getPits(sessionKey, driverNumber ?? undefined),
-      race_control: () => getRaceControl(sessionKey),
-      session_result: () => getSessionResults(sessionKey),
-      location: () => getLocation(sessionKey, driverNumber ?? undefined),
-      team_radio: () => getTeamRadio(sessionKey, driverNumber ?? undefined),
-      overtakes: () => getOvertakes(sessionKey),
-      starting_grid: () => getStartingGrid(sessionKey),
-      championship_drivers: () => getChampionshipDrivers(sessionKey),
-      championship_teams: () => getChampionshipTeams(sessionKey),
-      meetings: () => meetingKey ? getMeetingByKey(meetingKey) : Promise.resolve([]),
-      sessions: () => meetingKey ? getSessionsByMeeting(meetingKey) : Promise.resolve([]),
-    };
+  const requested = requestedKey === queryHash;
+  const refetch = useCallback(() => {
+    if (requested) void query.refetch();
+    setRequestedKey(queryHash);
+  }, [query.refetch, queryHash, requested]);
 
-    (fetchers[endpoint] ?? fetchers.laps)()
-      .then((result) => {
-        if (!cancelled) {
-          setData(result as Record<string, unknown>[]);
-          setLoading(false);
-        }
-      })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setError(err.message ?? "Unknown error");
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionKey, currentSession, endpoint, driverNumber, trigger]);
-
-  return { data, loading, error, refetch };
+  return {
+    data: requested ? (query.data as Record<string, unknown>[] | undefined) ?? [] : [],
+    loading: requested && query.isPending,
+    error: requested ? errorMessage(query.error) : null,
+    refetch,
+  };
 }
 
 // ─── Circuit info ─────────────────────────────────────────────────────────────
 
-/**
- * Fetches circuit track-layout data (x/y coordinates) from the
- * `circuit_info_url` field of the currently selected meeting.
- *
- * Returns `null` while loading or when no URL is available.
- */
 export function useCircuitInfo(): { circuitInfo: CircuitInfo | null; loading: boolean } {
   const meetingKey = useSelectedMeetingKey();
   const { meetings } = useMeetings();
-  const [circuitInfo, setCircuitInfo] = useState<CircuitInfo | null>(null);
-  const [loading, setLoading] = useState(false);
+  const meeting = meetings.find((item) => item.meeting_key === meetingKey);
+  const url = meeting?.circuit_info_url ?? null;
+  const query = useQuery<CircuitInfo, Error>({
+    queryKey: ["circuit-info", meetingKey, url],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(url!, { headers: { Accept: "application/json" }, signal });
+      if (!response.ok) throw new Error(`circuit_info fetch failed: ${response.status}`);
+      const raw = await response.json() as { x: number[]; y: number[]; circuitName?: string; rotation?: number };
+      return {
+        x: raw.x ?? [],
+        y: raw.y ?? [],
+        circuitName: raw.circuitName ?? null,
+        rotation: raw.rotation ?? null,
+      };
+    },
+    enabled: Boolean(url),
+    staleTime: QUERY_STALE_TIME.historical,
+    gcTime: QUERY_GC_TIME.standard,
+  });
 
-  useEffect(() => {
-    const meeting = meetings.find((m) => m.meeting_key === meetingKey);
-    const url = meeting?.circuit_info_url ?? null;
-
-    if (!url) {
-      setCircuitInfo(null);
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-
-    fetch(url, { headers: { Accept: "application/json" } })
-      .then((res) => {
-        if (!res.ok) throw new Error(`circuit_info fetch failed: ${res.status}`);
-        return res.json() as Promise<{ x: number[]; y: number[]; circuitName?: string; rotation?: number }>;
-      })
-      .then((raw) => {
-        if (!cancelled) {
-          setCircuitInfo({
-            x: raw.x ?? [],
-            y: raw.y ?? [],
-            circuitName: raw.circuitName ?? null,
-            rotation: raw.rotation ?? null,
-          });
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCircuitInfo(null);
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [meetingKey, meetings]);
-
-  return { circuitInfo, loading };
+  return { circuitInfo: query.data ?? null, loading: Boolean(url) && query.isPending };
 }

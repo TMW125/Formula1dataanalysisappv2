@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceReplayTime, buildReplayFrame, createReplayIndex, formatReplayGap, isTimelineMarkerEvent } from "./replayEngine";
+import { advanceReplayTime, buildReplayFrame, createReplayIndex, formatReplayGap, getReplayEnd, isTimelineMarkerEvent } from "./replayEngine";
 import type { ReplayDataset, ReplayEvent } from "./types";
 
 const START = Date.parse("2024-01-01T12:00:00Z");
@@ -113,6 +113,47 @@ describe("replay frames", () => {
     )!;
     expect(faded.markerOpacity).toBe(0);
     expect(faded.location).toBeNull();
+  });
+});
+
+describe("replay bounds", () => {
+  it("shrinks to the last recorded data and extends past the nominal end when needed", () => {
+    const short = dataset();
+    expect(getReplayEnd(short)).toBe(START + 35_000);
+
+    const extended = dataset();
+    extended.positions.push({
+      session_key: 1,
+      meeting_key: 1,
+      driver_number: 1,
+      position: 1,
+      date: new Date(START + 150_000).toISOString(),
+    });
+    extended.raceControl.push({
+      session_key: 1,
+      meeting_key: 1,
+      date: new Date(START + 90_000).toISOString(),
+      driver_number: null,
+      lap_number: null,
+      category: "Flag",
+      flag: "RED",
+      scope: "Track",
+      sector: null,
+      message: "RED FLAG",
+    });
+    extended.raceControl.push({
+      session_key: 1,
+      meeting_key: 1,
+      date: new Date(START + 110_000).toISOString(),
+      driver_number: null,
+      lap_number: null,
+      category: "Flag",
+      flag: "CHEQUERED",
+      scope: "Track",
+      sector: null,
+      message: "CHEQUERED FLAG",
+    });
+    expect(getReplayEnd(extended)).toBe(START + 120_000);
   });
 });
 

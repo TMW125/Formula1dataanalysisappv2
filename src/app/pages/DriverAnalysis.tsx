@@ -51,7 +51,10 @@ export function DriverAnalysis() {
   const selectedDriver = drivers.find((d) => d.driver_number === effectiveDriverNum) ?? null;
 
   // Car data for the selected driver
-  const { data: carData, loading: carDataLoading } = useCarDataForDriver(effectiveDriverNum);
+  // Keep the large telemetry request gated on an explicit user selection.
+  // The first driver is still shown as the initial selector value, but merely
+  // opening this page does not download its full car-data payload.
+  const { data: carData, loading: carDataLoading } = useCarDataForDriver(selectedDriverNumber);
 
   // Laps for the selected driver
   const driverLaps = useMemo(

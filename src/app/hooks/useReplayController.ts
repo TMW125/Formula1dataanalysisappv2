@@ -7,7 +7,8 @@ export type ReplaySpeed = (typeof REPLAY_SPEEDS)[number];
 export function useReplayController(
   start: number,
   end: number,
-  canAdvanceRef: MutableRefObject<boolean>
+  canAdvanceRef: MutableRefObject<boolean>,
+  endRef?: MutableRefObject<number>
 ) {
   const [currentTime, setCurrentTime] = useState(start);
   const [playing, setPlaying] = useState(false);
@@ -31,30 +32,30 @@ export function useReplayController(
       const elapsed = now - lastTickRef.current;
       lastTickRef.current = now;
       if (!canAdvanceRef.current) return;
-      const next = advanceReplayTime(currentTimeRef.current, elapsed, speed, end);
+      const next = advanceReplayTime(currentTimeRef.current, elapsed, speed, endRef?.current ?? end);
       currentTimeRef.current = next.time;
       setCurrentTime(next.time);
       if (next.complete) setPlaying(false);
     }, 250);
     return () => window.clearInterval(timer);
-  }, [playing, speed, end, canAdvanceRef]);
+  }, [playing, speed, end, canAdvanceRef, endRef]);
 
   const seek = useCallback((time: number) => {
-    const next = Math.min(end, Math.max(start, time));
+    const next = Math.min(endRef?.current ?? end, Math.max(start, time));
     currentTimeRef.current = next;
     setCurrentTime(next);
     lastTickRef.current = performance.now();
-  }, [start, end]);
+  }, [start, end, endRef]);
 
   const toggle = useCallback(() => {
     setPlaying((value) => {
-      if (!value && currentTimeRef.current >= end) {
+      if (!value && currentTimeRef.current >= (endRef?.current ?? end)) {
         currentTimeRef.current = start;
         setCurrentTime(start);
       }
       return !value;
     });
-  }, [end, start]);
+  }, [end, endRef, start]);
 
   const restart = useCallback(() => {
     setCurrentTime(start);

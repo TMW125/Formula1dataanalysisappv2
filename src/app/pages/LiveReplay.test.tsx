@@ -1,7 +1,15 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "../types/openf1";
+
+if (typeof ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
 
 const mocks = vi.hoisted(() => ({
   session: null as Session | null,
@@ -18,6 +26,8 @@ vi.mock("../hooks/useReplayData", () => ({
 }));
 
 import { LiveReplay, ReplayControls } from "./LiveReplay";
+
+afterEach(cleanup);
 
 describe("LiveReplay", () => {
   beforeEach(() => {
@@ -82,5 +92,41 @@ describe("ReplayControls", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Jump to RED at 00:30" }));
     expect(onSeek).toHaveBeenCalledWith(start + 30_000);
+  });
+
+  it("shows event details when a timeline marker receives focus", async () => {
+    const start = Date.parse("2024-01-01T12:00:00Z");
+    render(
+      <ReplayControls
+        start={start}
+        end={start + 60_000}
+        current={start}
+        playing={false}
+        buffering={false}
+        speed={1}
+        events={[{
+          id: "red-flag",
+          date: new Date(start + 30_000).toISOString(),
+          timestamp: start + 30_000,
+          kind: "control",
+          title: "RED",
+          detail: "Red flag deployed",
+          driverNumber: null,
+          lapNumber: 12,
+          flag: "RED",
+        }]}
+        disabled={false}
+        onToggle={vi.fn()}
+        onRestart={vi.fn()}
+        onSeek={vi.fn()}
+        onSpeed={vi.fn()}
+      />
+    );
+
+    fireEvent.focus(screen.getByRole("button", { name: "Jump to RED at 00:30" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tooltip")).toHaveTextContent("Red flag deployed");
+    });
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Lap 12");
   });
 });

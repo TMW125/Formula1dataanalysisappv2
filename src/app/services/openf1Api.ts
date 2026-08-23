@@ -316,10 +316,10 @@ export async function getLaps(sessionKey: number, driverNumber?: number, signal?
  * @example
  * const carData = await getCarData(9158, 1); // Verstappen only
  */
-export async function getCarData(sessionKey: number, driverNumber?: number): Promise<CarData[]> {
+export async function getCarData(sessionKey: number, driverNumber?: number, signal?: AbortSignal): Promise<CarData[]> {
   const params: CarDataParams = { session_key: sessionKey };
   if (driverNumber !== undefined) params.driver_number = driverNumber;
-  return apiFetch<CarData[]>("/car_data", params);
+  return apiFetch<CarData[]>("/car_data", params, signal);
 }
 
 // ─── Positions ────────────────────────────────────────────────────────────────
@@ -405,10 +405,10 @@ export async function getSessionResults(sessionKey: number, signal?: AbortSignal
  * ⚠️  This endpoint returns very large payloads for full sessions.
  * Always filter by driver_number in the explorer.
  */
-export async function getLocation(sessionKey: number, driverNumber?: number): Promise<Location[]> {
+export async function getLocation(sessionKey: number, driverNumber?: number, signal?: AbortSignal): Promise<Location[]> {
   const params: LocationParams = { session_key: sessionKey };
   if (driverNumber !== undefined) params.driver_number = driverNumber;
-  return apiFetch<Location[]>("/location", params);
+  return apiFetch<Location[]>("/location", params, signal);
 }
 
 /** Fetch one bounded location window for all drivers in a session. */
@@ -469,9 +469,9 @@ export async function getStartingGrid(sessionKey: number, signal?: AbortSignal):
  * Fetch driver championship standings for a (race) session.
  * Only available for race sessions.
  */
-export async function getChampionshipDrivers(sessionKey: number): Promise<ChampionshipDriver[]> {
+export async function getChampionshipDrivers(sessionKey: number, signal?: AbortSignal): Promise<ChampionshipDriver[]> {
   const params: ChampionshipDriversParams = { session_key: sessionKey };
-  return apiFetch<ChampionshipDriver[]>("/championship_drivers", params);
+  return apiFetch<ChampionshipDriver[]>("/championship_drivers", params, signal);
 }
 
 // ─── Championship Teams (beta) ────────────────────────────────────────────────
@@ -480,9 +480,9 @@ export async function getChampionshipDrivers(sessionKey: number): Promise<Champi
  * Fetch team championship standings for a (race) session.
  * Only available for race sessions.
  */
-export async function getChampionshipTeams(sessionKey: number): Promise<ChampionshipTeam[]> {
+export async function getChampionshipTeams(sessionKey: number, signal?: AbortSignal): Promise<ChampionshipTeam[]> {
   const params: ChampionshipTeamsParams = { session_key: sessionKey };
-  return apiFetch<ChampionshipTeam[]>("/championship_teams", params);
+  return apiFetch<ChampionshipTeam[]>("/championship_teams", params, signal);
 }
 // ─── Convenience re-exports ──────────────────────────────────────────────────
 
