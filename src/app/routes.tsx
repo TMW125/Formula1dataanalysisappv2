@@ -5,6 +5,7 @@ import { DriverAnalysis } from "./pages/DriverAnalysis";
 import { DriverComparison } from "./pages/DriverComparison";
 import { RaceStrategy } from "./pages/RaceStrategy";
 import { DataExplorer } from "./pages/DataExplorer";
+import { LiveReplay } from "./pages/LiveReplay";
 
 export const router = createBrowserRouter([
   {
@@ -16,6 +17,7 @@ export const router = createBrowserRouter([
       { path: "driver-comparison", Component: DriverComparison },
       { path: "race-strategy", Component: RaceStrategy },
       { path: "data-explorer", Component: DataExplorer },
+      { path: "live-replay", Component: LiveReplay },
     ],
   },
 ]);

@@ -1,5 +1,5 @@
 import { Outlet, NavLink } from "react-router";
-import { LayoutDashboard, Activity, GitCompare, TrendingUp, Database, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Activity, GitCompare, TrendingUp, Database, ChevronRight, RadioTower } from "lucide-react";
 import { useF1Data, useMeetings, useSessions } from "../context/F1DataContext";
 
 /** Seasons available in the selector — extend as new seasons are released. */
@@ -15,20 +15,21 @@ export function MainLayout() {
     { to: "/driver-analysis", icon: Activity, label: "Driver Analysis" },
     { to: "/driver-comparison", icon: GitCompare, label: "Driver Comparison" },
     { to: "/race-strategy", icon: TrendingUp, label: "Race Strategy" },
+    { to: "/live-replay", icon: RadioTower, label: "Live Replay" },
     { to: "/data-explorer", icon: Database, label: "Data Explorer" },
   ];
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
+      <aside className="w-16 md:w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col transition-[width]">
         {/* Logo */}
-        <div className="p-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
+        <div className="p-3 md:p-6 border-b border-sidebar-border">
+          <div className="flex items-center justify-center md:justify-start gap-2">
             <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
               <Activity className="w-5 h-5 text-primary-foreground" />
             </div>
-            <div>
+            <div className="hidden md:block">
               <h1 className="font-bold tracking-tight text-sidebar-foreground">F1 Analytics</h1>
               <p className="text-xs text-muted-foreground">OpenF1 Data Platform</p>
             </div>
@@ -36,14 +37,14 @@ export function MainLayout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-2 md:p-4 space-y-1">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === "/"}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-lg transition-all group ${
+                `flex items-center justify-center md:justify-start gap-3 px-2 md:px-4 py-3 rounded-lg transition-all group ${
                   isActive
                     ? "bg-primary text-primary-foreground"
                     : "text-sidebar-foreground hover:bg-sidebar-accent"
@@ -53,9 +54,9 @@ export function MainLayout() {
               {({ isActive }) => (
                 <>
                   <item.icon className="w-5 h-5" />
-                  <span className="flex-1">{item.label}</span>
+                  <span className="hidden md:block flex-1">{item.label}</span>
                   <ChevronRight
-                    className={`w-4 h-4 transition-transform ${
+                    className={`hidden md:block w-4 h-4 transition-transform ${
                       isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                     }`}
                   />
@@ -66,7 +67,7 @@ export function MainLayout() {
         </nav>
 
         {/* Version Info */}
-        <div className="p-4 border-t border-sidebar-border">
+        <div className="hidden md:block p-4 border-t border-sidebar-border">
           <p className="text-xs text-muted-foreground">Version 1.0.0</p>
           <p className="text-xs text-muted-foreground">OpenF1 API</p>
         </div>
@@ -75,7 +76,7 @@ export function MainLayout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar */}
-        <header className="bg-card border-b border-border px-6 py-4 flex items-center gap-4">
+        <header className="bg-card border-b border-border px-3 md:px-6 py-4 flex items-center gap-3 md:gap-4 overflow-x-auto">
           {/* Season Selector */}
           <select
             value={state.selectedSeason}

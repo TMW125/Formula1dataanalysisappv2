@@ -98,7 +98,9 @@ export function buildLeaderboardFromResults(
 
   return results.map((r) => {
     const d = driverMap.get(r.driver_number);
-    const rawGap = r.gap_to_leader;
+    const rawGap = Array.isArray(r.gap_to_leader)
+      ? [...r.gap_to_leader].reverse().find((value) => value !== null) ?? null
+      : r.gap_to_leader;
     let gap: string;
     if (rawGap === null || r.position === 1) {
       gap = "-";

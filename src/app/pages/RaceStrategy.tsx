@@ -29,7 +29,7 @@ function mergeSeries(series: StrategyLineSeries[]): WideChartPoint[] {
   const rows = new Map<number, WideChartPoint>();
   for (const line of series) {
     for (const point of line.values) {
-      const row = rows.get(point.lap) ?? { lap: point.lap };
+      const row: WideChartPoint = rows.get(point.lap) ?? { lap: point.lap };
       row[line.key] = point.value;
       rows.set(point.lap, row);
     }
