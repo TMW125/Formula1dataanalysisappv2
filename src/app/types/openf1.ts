@@ -117,8 +117,8 @@ export interface Interval {
   meeting_key: number;
   driver_number: number;
   date: string;
-  interval: number | null;      // gap to car ahead (seconds)
-  gap_to_leader: number | null; // gap to race leader (seconds)
+  interval: number | string | null;      // seconds, "+1 LAP", or null
+  gap_to_leader: number | string | null; // seconds, "+1 LAP", or null
 }
 
 // ─── Stints ──────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ export interface Stint {
   driver_number: number;
   stint_number: number;
   lap_start: number;
-  lap_end: number;
+  lap_end: number | null;
   // OpenF1 can return null when a stint's compound is not available.
   compound: "SOFT" | "MEDIUM" | "HARD" | "INTERMEDIATE" | "WET" | "UNKNOWN" | null;
   tyre_age_at_start: number;
@@ -171,8 +171,8 @@ export interface SessionResult {
   meeting_key: number;
   driver_number: number;
   position: number;
-  duration: number | null;      // best lap time in seconds
-  gap_to_leader: number | null; // gap to leader in seconds
+  duration: number | Array<number | null> | null;
+  gap_to_leader: number | string | Array<number | string | null> | null;
   number_of_laps: number;
   dnf: boolean;
   dns: boolean;
@@ -326,6 +326,11 @@ export interface SessionResultParams {
 export interface LocationParams {
   session_key: number;
   driver_number?: number;
+}
+
+export interface LocationRangeParams extends LocationParams {
+  "date>=": string;
+  "date<": string;
 }
 
 export interface TeamRadioParams {
