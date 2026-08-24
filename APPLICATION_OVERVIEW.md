@@ -10,13 +10,13 @@ A professional Formula 1 data analysis web application built with React, TypeScr
 ├── App.tsx                     # Main application entry with React Router
 ├── routes.tsx                  # Route configuration
 ├── layouts/
-│   └── MainLayout.tsx         # Main layout with sidebar and top bar
+│   └── MainLayout.tsx         # Main layout with sidebar controls
 ├── pages/
 │   ├── Dashboard.tsx          # Race weekend overview
-│   ├── DriverAnalysis.tsx     # Detailed driver telemetry
-│   ├── DriverComparison.tsx   # Side-by-side driver comparison
+│   ├── PracticeAnalysis.tsx   # Per-session practice performance
+│   ├── QualifyingAnalysis.tsx # Qualifying and sprint qualifying analysis
 │   ├── RaceStrategy.tsx       # Race pace and tire strategy
-│   └── DataExplorer.tsx       # Raw data access and export
+│   └── LiveReplay.tsx         # Completed race/sprint replay
 ├── components/
 │   ├── charts/
 │   │   ├── TelemetryChart.tsx # Reusable telemetry visualization
@@ -59,38 +59,28 @@ A professional Formula 1 data analysis web application built with React, TypeScr
 
 ### 1. Dashboard (`/`)
 - **Overview**: High-level race weekend summary
+- **Leaderboard**: Existing leaderboard sourced from the latest completed session
 - **Components**:
-  - 4 stats cards (drivers, session time, top speed, best lap)
+  - Latest completed session context
+  - 4 stats cards for the latest completed session
   - Interactive track map with driver positions
-  - Session information panel
-  - Top 10 lap time chart
-  - Full driver leaderboard
+  - Full driver leaderboard from the latest completed session
 
-### 2. Driver Analysis (`/driver-analysis`)
-- **Purpose**: In-depth single driver telemetry analysis
+### 2. Practice (`/practice`)
+- **Purpose**: Select drivers for the latest completed practice session
 - **Features**:
-  - Driver and lap selectors
-  - Driver information card with team colors
-  - Sector times breakdown (3 sectors)
-  - 5 telemetry charts:
-    - Speed vs Distance
-    - Throttle Application
-    - Brake Application
-    - Gear Selection
-    - Engine RPM
-  - Tire compound and stint history
+  - Race-style Drivers card
+  - Scheduled/in-progress messaging for unavailable sessions
 
-### 3. Driver Comparison (`/driver-comparison`)
-- **Purpose**: Compare two drivers side-by-side
+### 3. Qualifying (`/qualifying`)
+- **Purpose**: Compare selected drivers’ fastest valid Qualifying or Sprint Qualifying laps
 - **Features**:
-  - Dual driver selection
-  - Driver comparison cards
-  - Delta time graph
-  - Overlaid speed comparison
-  - Overlaid throttle comparison
-  - Corner-by-corner analysis (8 corners)
+  - Race-style Drivers card
+  - Qualifying/Sprint Qualifying toggle on sprint weekends
+  - Speed, throttle, brake, gear, and RPM telemetry charts aligned by lap distance
+  - Running delta to the fastest selected lap with synchronized hover tooltips
 
-### 4. Race Strategy (`/race-strategy`)
+### 4. Race (`/race`)
 - **Purpose**: Analyze race pace and pit strategy
 - **Features**:
   - Key metrics cards (laps, avg pit stop, fastest lap)
@@ -99,14 +89,12 @@ A professional Formula 1 data analysis web application built with React, TypeScr
   - Average pace by stint bar chart
   - Pit stop summary table
 
-### 5. Data Explorer (`/data-explorer`)
-- **Purpose**: Raw API data access for advanced users
+### 5. Live Replay (`/live-replay`)
+- **Purpose**: Replay completed Race or Sprint sessions
 - **Features**:
-  - API endpoint selector (6 endpoints)
-  - Multi-filter controls (driver, session, lap)
-  - Table/JSON view toggle
-  - CSV export functionality
-  - OpenF1 API documentation panel
+  - Track replay and classification
+  - Replay controls and event feed
+  - Independent Race/Sprint toggle on sprint weekends
 
 ## 🎯 Key Components
 
@@ -145,15 +133,15 @@ Designed to integrate with OpenF1 API endpoints:
 
 ### Sidebar Navigation
 - Dashboard
-- Driver Analysis
-- Driver Comparison
-- Race Strategy
-- Data Explorer
+- Practice
+- Qualifying
+- Race
+- Live Replay
 
-### Top Bar Controls
-- Session selector (Practice 1-3, Qualifying, Race)
-- Race weekend selector (5 Grand Prix)
-- Driver search functionality
+### Sidebar Data Selection
+- Year selector
+- Race weekend selector
+- No manual session selector; pages resolve their own session automatically
 
 ## 📱 Responsive Design
 
@@ -208,7 +196,7 @@ See `/DESIGN_SYSTEM.md` for comprehensive design system documentation including:
 
 The application is fully functional with:
 - ✅ Complete navigation system
-- ✅ All 5 pages implemented
+- ✅ Session-focused analysis pages implemented
 - ✅ Reusable component library
 - ✅ Professional F1 design theme
 - ✅ Mock data for demonstration

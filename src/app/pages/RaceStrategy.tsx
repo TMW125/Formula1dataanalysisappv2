@@ -1,28 +1,31 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Check, ChevronsUpDown, Clock3, Flag, Gauge, Search, Users, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from "recharts";
+import { Clock3, Gauge, Users } from "lucide-react";
 import {
   useDriversData, useLapsData, usePitsData, usePositionsData,
-  useSessionResultsData, useStintsData,
+  useIntervalsData, useSessionResultsData, useStintsData,
 } from "../hooks/useSessionData";
-import { useSelectedSessionKey } from "../context/F1DataContext";
+import { useF1Data, useSessionMode } from "../context/F1DataContext";
+import { useResolvedSession } from "../hooks/useSessionScope";
+import { useDriverSelection } from "../hooks/useDriverSelection";
 import {
-  buildCumulativeDeltaSeries, buildDefaultDriverSelection, buildLapTimeSeries,
+  buildLapTimeSeries, buildRunningGapSeries,
   buildPitStops, buildPositionSeries, buildStintTimeline, formatLapTime, getBestLapFormatted,
   toHexColor, type StrategyLineSeries,
 } from "../utils/transformers";
-import { TIRE_COLORS, type TireCompound } from "../types/ui";
+import { DRIVER_DASH_PATTERN, TIRE_COLORS, type TireCompound } from "../types/ui";
+import { DriverSelectionCard } from "../components/DriverSelectionCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
+import { DriverChartTooltip } from "../components/charts/DriverChartTooltip";
 import { LapTimeViolinChart } from "../components/charts/LapTimeViolinChart";
-import { Badge } from "../components/ui/badge";
-import { Button, buttonVariants } from "../components/ui/button";
-import { Checkbox } from "../components/ui/checkbox";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "../components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { Button } from "../components/ui/button";
+import { SessionAvailability } from "../components/SessionAvailability";
+import { SessionVariantToggle } from "../components/SessionVariantToggle";
 
 const CHART_GRID = "#2a2a36";
 const CHART_TEXT = "#9ca3af";
-const TOOLTIP_STYLE = { backgroundColor: "#15151c", border: "1px solid #2a2a36", borderRadius: "0.375rem", color: "#f5f5f5" };
+const CHART_MARGIN = { top: 8, right: 18, left: 8, bottom: 12 };
+const INITIAL_LINE_ANIMATION_DURATION = 1500;
 type WideChartPoint = { lap: number } & Record<string, number>;
 
 function mergeSeries(series: StrategyLineSeries[]): WideChartPoint[] {
@@ -49,43 +52,21 @@ function ChartEmpty({ children }: { children: ReactNode }) {
 }
 
 export function RaceStrategy() {
-  const sessionKey = useSelectedSessionKey();
-  const { data: drivers, loading: driversLoading } = useDriversData();
-  const { data: laps, loading: lapsLoading } = useLapsData();
-  const { data: stints, loading: stintsLoading } = useStintsData();
-  const { data: pits, loading: pitsLoading } = usePitsData();
-  const { data: positions, loading: positionsLoading } = usePositionsData();
-  const { data: results, loading: resultsLoading } = useSessionResultsData();
-  const [selectedDrivers, setSelectedDrivers] = useState<number[]>([]);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const initializedSession = useRef<number | null>(null);
-  const loading = driversLoading || lapsLoading || stintsLoading || pitsLoading || positionsLoading || resultsLoading;
-
-  useEffect(() => {
-    if (sessionKey == null) {
-      initializedSession.current = null;
-      setSelectedDrivers([]);
-      return;
-    }
-    if (initializedSession.current === sessionKey) return;
-    setSelectedDrivers([]);
-    const currentDrivers = drivers.filter((driver) => driver.session_key === sessionKey);
-    if (loading || currentDrivers.length === 0) return;
-    const currentResults = results.filter((result) => result.session_key === sessionKey);
-    const currentLaps = laps.filter((lap) => lap.session_key === sessionKey);
-    setSelectedDrivers(buildDefaultDriverSelection(currentDrivers, currentResults, currentLaps));
-    initializedSession.current = sessionKey;
-  }, [sessionKey, loading, drivers, results, laps]);
-
-  const selectedSet = useMemo(() => new Set(selectedDrivers), [selectedDrivers]);
-  const defaults = useMemo(() => buildDefaultDriverSelection(drivers, results, laps), [drivers, results, laps]);
-  const resultPosition = useMemo(() => new Map(results.map((result) => [result.driver_number, result.position])), [results]);
-  const orderedDrivers = useMemo(() => [...drivers].sort((a, b) => {
-    const aPosition = resultPosition.get(a.driver_number) ?? Infinity;
-    const bPosition = resultPosition.get(b.driver_number) ?? Infinity;
-    return aPosition - bPosition || a.name_acronym.localeCompare(b.name_acronym);
-  }), [drivers, resultPosition]);
-  const selectedDriverData = useMemo(() => selectedDrivers.map((number) => drivers.find((driver) => driver.driver_number === number)).filter((driver) => driver != null), [selectedDrivers, drivers]);
+  const { setSessionMode } = useF1Data();
+  const variant = useSessionMode("raceStrategy");
+  const resolution = useResolvedSession("race", variant);
+  const selectedSession = resolution.session;
+  const sessionKey = resolution.status === "completed" ? selectedSession?.session_key ?? null : null;
+  const { data: drivers, loading: driversLoading } = useDriversData(sessionKey);
+  const { data: laps, loading: lapsLoading } = useLapsData(sessionKey);
+  const { data: stints, loading: stintsLoading } = useStintsData(sessionKey);
+  const { data: pits, loading: pitsLoading } = usePitsData(sessionKey);
+  const { data: positions, loading: positionsLoading } = usePositionsData(sessionKey);
+  const { data: intervals, loading: intervalsLoading } = useIntervalsData(sessionKey);
+  const { data: results, loading: resultsLoading } = useSessionResultsData(sessionKey);
+  const loading = driversLoading || lapsLoading || stintsLoading || pitsLoading || positionsLoading || intervalsLoading || resultsLoading;
+  const selection = useDriverSelection({ sessionKey, drivers, results, laps, loading });
+  const { selectedDrivers, selectedSet, defaults, driverStyles } = selection;
   const filteredLaps = useMemo(() => laps.filter((lap) => selectedSet.has(lap.driver_number)), [laps, selectedSet]);
   const filteredStints = useMemo(() => stints.filter((stint) => selectedSet.has(stint.driver_number)), [stints, selectedSet]);
   const filteredPits = useMemo(() => pits.filter((pit) => selectedSet.has(pit.driver_number)), [pits, selectedSet]);
@@ -94,10 +75,10 @@ export function RaceStrategy() {
     return buildStintTimeline(filteredStints, drivers).sort((a, b) => (order.get(a.driverNumber) ?? 0) - (order.get(b.driverNumber) ?? 0));
   }, [filteredStints, drivers, selectedDrivers]);
   const pitStops = useMemo(() => buildPitStops(filteredPits, drivers, filteredStints), [filteredPits, drivers, filteredStints]);
-  const cumulative = useMemo(() => buildCumulativeDeltaSeries(laps, drivers, selectedDrivers, results), [laps, drivers, selectedDrivers, results]);
-  const lapTimeSeries = useMemo(() => buildLapTimeSeries(laps, pits, drivers, selectedDrivers), [laps, pits, drivers, selectedDrivers]);
-  const positionSeries = useMemo(() => buildPositionSeries(laps, positions, drivers, selectedDrivers), [laps, positions, drivers, selectedDrivers]);
-  const cumulativeData = useMemo(() => mergeSeries(cumulative.series), [cumulative.series]);
+  const runningGapSeries = useMemo(() => buildRunningGapSeries(laps, intervals, drivers, selectedDrivers, results, driverStyles), [laps, intervals, drivers, selectedDrivers, results, driverStyles]);
+  const lapTimeSeries = useMemo(() => buildLapTimeSeries(laps, pits, drivers, selectedDrivers, driverStyles), [laps, pits, drivers, selectedDrivers, driverStyles]);
+  const positionSeries = useMemo(() => buildPositionSeries(laps, positions, drivers, selectedDrivers, driverStyles), [laps, positions, drivers, selectedDrivers, driverStyles]);
+  const runningGapData = useMemo(() => mergeSeries(runningGapSeries), [runningGapSeries]);
   const lapTimeData = useMemo(() => mergeSeries(lapTimeSeries), [lapTimeSeries]);
   const positionData = useMemo(() => mergeSeries(positionSeries), [positionSeries]);
   const totalLaps = laps.length ? Math.max(...laps.map((lap) => lap.lap_number)) : 0;
@@ -109,56 +90,21 @@ export function RaceStrategy() {
     if (ticks.at(-1) !== totalLaps) ticks.push(totalLaps);
     return ticks;
   }, [totalLaps]);
-  const referenceName = drivers.find((driver) => driver.driver_number === cumulative.referenceDriverNumber)?.name_acronym;
   const fastestSelectedLap = getBestLapFormatted(filteredLaps.filter((lap) => !lap.is_pit_out_lap));
 
-  const toggleDriver = (driverNumber: number) => setSelectedDrivers((current) => current.includes(driverNumber)
-    ? current.filter((number) => number !== driverNumber)
-    : [...current, driverNumber]);
-
-  if (!sessionKey) return <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
-    <Flag className="w-12 h-12 text-muted-foreground mb-4" /><h2 className="text-xl text-foreground mb-2">No Session Selected</h2>
-    <p className="text-muted-foreground">Select a season, event, and session from the sidebar to view race strategy.</p>
-  </div>;
-  if (loading || initializedSession.current !== sessionKey) return <LoadingSpinner />;
+  if (resolution.status === "loading") return <LoadingSpinner />;
+  if (resolution.status !== "completed") {
+    return <div className="space-y-5 p-4 md:p-6">
+      <header className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl tracking-tight text-foreground">Race</h1><p className="mt-2 text-muted-foreground">Compare race pace, tyre life, pit timing, and track position.</p></div><SessionVariantToggle value={variant} onChange={(value) => setSessionMode("raceStrategy", value)} supportsSprint={resolution.supportsSprint} mainLabel="Race" sprintLabel="Sprint" ariaLabel="Race strategy session" /></header>
+      <SessionAvailability session={selectedSession} status={resolution.status} title="Race session unavailable" />
+    </div>;
+  }
+  if (loading || !selection.ready) return <LoadingSpinner />;
 
   return <div className="p-4 md:p-6 space-y-6">
-    <header><h1 className="text-3xl tracking-tight text-foreground mb-2">Race Strategy</h1><p className="text-muted-foreground">Compare race pace, tyre life, pit timing, and track position.</p></header>
+    <header className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-3xl tracking-tight text-foreground">Race</h1><p className="mt-2 text-muted-foreground">{selectedSession?.session_name} · Compare race pace, tyre life, pit timing, and track position.</p></div><SessionVariantToggle value={variant} onChange={(value) => setSessionMode("raceStrategy", value)} supportsSprint={resolution.supportsSprint} mainLabel="Race" sprintLabel="Sprint" ariaLabel="Race strategy session" /></header>
 
-    <section className="bg-card border border-border rounded-lg p-4 md:p-5 space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div><h2 className="text-card-foreground flex items-center gap-2"><Users className="w-4 h-4 text-primary" /> Drivers</h2><p className="text-xs text-muted-foreground mt-1">The selection applies to every chart and table below.</p></div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-            <PopoverTrigger asChild><button type="button" className={buttonVariants({ variant: "outline", className: "min-w-52 justify-between" })} aria-expanded={pickerOpen}>
-              <span className="inline-flex items-center gap-2"><Search className="w-4 h-4" />{selectedDrivers.length ? `${selectedDrivers.length} selected` : "Choose drivers"}</span><ChevronsUpDown className="w-4 h-4 text-muted-foreground" />
-            </button></PopoverTrigger>
-            <PopoverContent className="w-80 p-0" align="end"><Command><CommandInput placeholder="Search drivers or teams…" /><CommandList className="max-h-72"><CommandEmpty>No drivers found.</CommandEmpty><CommandGroup>
-              {orderedDrivers.map((driver) => {
-                const selected = selectedSet.has(driver.driver_number);
-                return <CommandItem
-                  key={driver.driver_number}
-                  value={`${driver.full_name} ${driver.name_acronym} ${driver.team_name}`}
-                  onSelect={() => toggleDriver(driver.driver_number)}
-                  className="gap-3 data-[selected=true]:bg-secondary data-[selected=true]:text-foreground"
-                >
-                  <Checkbox checked={selected} aria-label={`Select ${driver.full_name}`} /><span className="w-1 h-7 rounded-full" style={{ backgroundColor: toHexColor(driver.team_colour) }} />
-                  <span className="min-w-0 flex-1"><span className="block text-sm truncate">{driver.full_name}</span><span className="block text-xs text-muted-foreground truncate">{driver.team_name}</span></span>
-                  {resultPosition.has(driver.driver_number) && <span className="text-xs font-mono text-muted-foreground">P{resultPosition.get(driver.driver_number)}</span>}{selected && <Check className="w-4 h-4 text-primary" />}
-                </CommandItem>;
-              })}
-            </CommandGroup></CommandList></Command></PopoverContent>
-          </Popover>
-          <Button variant="secondary" size="sm" onClick={() => setSelectedDrivers(defaults)}>Top 5</Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelectedDrivers(orderedDrivers.map((driver) => driver.driver_number))}>Select all</Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelectedDrivers([])}>Clear</Button>
-        </div>
-      </div>
-      {selectedDriverData.length ? <div className="flex flex-wrap gap-2">{selectedDriverData.map((driver) => <Badge key={driver.driver_number} variant="outline" className="gap-2 py-1 pl-2.5 pr-1">
-        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: toHexColor(driver.team_colour) }} />{driver.name_acronym}
-        <button type="button" onClick={() => toggleDriver(driver.driver_number)} className="rounded-sm p-0.5 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Remove ${driver.full_name}`}><X className="w-3 h-3" /></button>
-      </Badge>)}</div> : <p className="text-sm text-muted-foreground">No drivers selected. Choose one or more drivers to populate the analysis.</p>}
-    </section>
+    <DriverSelectionCard selection={selection} description="The selection applies to every chart and table below." />
 
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <Metric icon={<Users />} label="Selected drivers" value={`${selectedDrivers.length}`} />
@@ -166,7 +112,7 @@ export function RaceStrategy() {
       <Metric icon={<Gauge />} label="Fastest clean lap" value={fastestSelectedLap} mono />
     </div>
 
-    {!selectedDrivers.length ? <div className="bg-card border border-dashed border-border rounded-lg py-20 px-6 text-center"><Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" /><h2 className="text-lg text-card-foreground">Select drivers to compare</h2><p className="text-sm text-muted-foreground mt-1">Use the driver picker above or restore the top five finishers.</p><Button className="mt-5" onClick={() => setSelectedDrivers(defaults)}>Show top 5</Button></div> : <>
+    {!selectedDrivers.length ? <div className="bg-card border border-dashed border-border rounded-lg py-20 px-6 text-center"><Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" /><h2 className="text-lg text-card-foreground">Select drivers to compare</h2><p className="text-sm text-muted-foreground mt-1">Use the driver picker above or restore the top five finishers.</p><Button className="mt-5" onClick={() => selection.setSelectedDrivers(defaults)}>Show top 5</Button></div> : <>
       <ChartCard title="Lap-time distribution" description="The width shows where each driver’s cleaned lap times are concentrated; the white marker is the median.">
         <LapTimeViolinChart series={lapTimeSeries} />
       </ChartCard>
@@ -186,7 +132,7 @@ export function RaceStrategy() {
       </ChartCard>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <StrategyLineChart title="Cumulative race-time delta" description={`Time gained or lost through the race${referenceName ? ` relative to ${referenceName}` : ""}. Pit-loss laps are included.`} data={cumulativeData} series={cumulative.series} yLabel="Delta (s)" yFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(0)}s`} tooltipFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(3)}s`} empty="Comparable lap-time data is unavailable." zeroLine />
+        <StrategyLineChart title="Running gap to race winner" description="Timestamped OpenF1 gap normalized to the official race winner, sampled at the latest available interval in each race lap. Missing or lapped samples are interpolated from surrounding laps." data={runningGapData} series={runningGapSeries} yLabel="Gap to winner (s)" yFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(0)}s`} tooltipFormatter={(value) => `${value > 0 ? "+" : ""}${value.toFixed(3)}s`} empty="Running gap data is unavailable for the selected drivers." zeroLine />
         <StrategyLineChart title="Position progression" description="End-of-lap running position, with P1 at the top of the chart." data={positionData} series={positionSeries} yFormatter={(value) => `P${value}`} tooltipFormatter={(value) => `P${value}`} empty="Position history is unavailable for the selected drivers." reversed position />
       </div>
 
@@ -217,17 +163,66 @@ interface StrategyLineChartProps {
 }
 
 function StrategyLineChart({ title, description, data, series, yFormatter, tooltipFormatter, empty, xLabel = "Race lap", yLabel, zeroLine, reversed, position, fullWidth }: StrategyLineChartProps) {
-  return <ChartCard title={title} description={description}>{!data.length ? <ChartEmpty>{empty}</ChartEmpty> : <ResponsiveContainer width="100%" height={fullWidth ? 380 : 340}>
-    <LineChart data={data} margin={{ top: 8, right: 18, left: 8, bottom: 12 }}>
-      <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
-      <XAxis dataKey="lap" type="number" domain={xLabel === "Race lap" ? [1, "dataMax"] : ["dataMin", "dataMax"]} allowDecimals={false} stroke={CHART_TEXT} tick={{ fill: CHART_TEXT, fontSize: 11 }} label={{ value: xLabel, position: "insideBottom", offset: -8, fill: CHART_TEXT }} />
-      <YAxis reversed={reversed} domain={position ? [1, 20] : ["auto", "auto"]} allowDecimals={!position} stroke={CHART_TEXT} tick={{ fill: CHART_TEXT, fontSize: 11 }} tickFormatter={yFormatter} label={yLabel ? { value: yLabel, angle: -90, position: "insideLeft", fill: CHART_TEXT } : undefined} width={position ? 38 : 58} />
-      {zeroLine && <ReferenceLine y={0} stroke="#f5f5f5" strokeOpacity={0.5} />}
-      <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(value) => `${xLabel === "Race lap" ? "Lap" : "Tyre age"} ${value}`} formatter={(value: number, name: string) => [tooltipFormatter(value), name]} />
-      <Legend wrapperStyle={{ paddingTop: 12 }} />
-      {series.map((line) => {
-        return <Line key={line.key} type={position ? "stepAfter" : "linear"} dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} dot={false} connectNulls={false} />;
-      })}
-    </LineChart>
-  </ResponsiveContainer>}</ChartCard>;
+  const [initialAnimationComplete, setInitialAnimationComplete] = useState(false);
+
+  useEffect(() => {
+    if (data.length === 0 || initialAnimationComplete) return undefined;
+    const timeout = window.setTimeout(() => setInitialAnimationComplete(true), INITIAL_LINE_ANIMATION_DURATION);
+    return () => window.clearTimeout(timeout);
+  }, [data.length, initialAnimationComplete]);
+
+  const [hoveredPoint, setHoveredPoint] = useState<WideChartPoint | null>(null);
+  const animateLines = data.length > 0 && !initialAnimationComplete;
+  const xDomain = useMemo<readonly [number, number]>(() => {
+    const minimum = xLabel === "Race lap" ? 1 : data[0]?.lap ?? 0;
+    const maximum = data.at(-1)?.lap ?? minimum + 1;
+    return [minimum, Math.max(maximum, minimum + 1)];
+  }, [data, xLabel]);
+  const yAxisWidth = position ? 38 : 58;
+  const handleMouseMove = (state: { activeLabel?: string | number; activePayload?: Array<{ payload?: WideChartPoint }> }) => {
+    setInitialAnimationComplete(true);
+    const point = state.activePayload?.[0]?.payload;
+    const activeLap = typeof point?.lap === "number" ? point.lap : Number(state.activeLabel);
+    if (Number.isFinite(activeLap)) setHoveredPoint(point ?? { lap: activeLap });
+  };
+
+  return <ChartCard title={title} description={description}>{!data.length ? <ChartEmpty>{empty}</ChartEmpty> : <div className="relative">
+    <ResponsiveContainer width="100%" height={fullWidth ? 380 : 340}>
+      <LineChart data={data} margin={CHART_MARGIN} onMouseMove={handleMouseMove} onMouseLeave={() => setHoveredPoint(null)}>
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+        <XAxis dataKey="lap" type="number" domain={xLabel === "Race lap" ? [1, "dataMax"] : ["dataMin", "dataMax"]} allowDecimals={false} stroke={CHART_TEXT} tick={{ fill: CHART_TEXT, fontSize: 11 }} label={{ value: xLabel, position: "insideBottom", offset: -8, fill: CHART_TEXT }} />
+        <YAxis reversed={reversed} domain={position ? [1, 20] : ["auto", "auto"]} allowDecimals={!position} stroke={CHART_TEXT} tick={{ fill: CHART_TEXT, fontSize: 11 }} tickFormatter={yFormatter} label={yLabel ? { value: yLabel, angle: -90, position: "insideLeft", fill: CHART_TEXT } : undefined} width={yAxisWidth} />
+        {zeroLine && <ReferenceLine y={0} stroke="#f5f5f5" strokeOpacity={0.5} />}
+        {hoveredPoint && <ReferenceLine x={hoveredPoint.lap} stroke="#f5f5f5" strokeDasharray="4 4" strokeOpacity={0.7} />}
+        {series.map((line) => (
+          <Line
+            key={line.key}
+            type={position ? "stepAfter" : "linear"}
+            dataKey={line.key}
+            name={line.name}
+            stroke={line.color}
+            strokeDasharray={line.lineStyle === "dashed" ? DRIVER_DASH_PATTERN : undefined}
+            isAnimationActive={animateLines}
+            animationDuration={INITIAL_LINE_ANIMATION_DURATION}
+            strokeWidth={2}
+            dot={false}
+            connectNulls={false}
+          />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
+    {hoveredPoint && (
+      <DriverChartTooltip
+        title={title}
+        subtitle={`${xLabel === "Race lap" ? "Lap" : "Tyre age"} ${hoveredPoint.lap}`}
+        xValue={hoveredPoint.lap}
+        xDomain={xDomain}
+        data={hoveredPoint}
+        series={series}
+        formatValue={tooltipFormatter}
+        chartMargin={CHART_MARGIN}
+        yAxisWidth={yAxisWidth}
+      />
+    )}
+  </div>}</ChartCard>;
 }

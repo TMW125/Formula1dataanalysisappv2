@@ -1,14 +1,14 @@
 /**
  * F1DataContext
  *
- * Global state for the currently selected season, meeting and session.
+ * Global state for the currently selected season and meeting.
  * Also drives the cascading fetches:
  *
- *   Season selected  →  fetch meetings, reset meeting + session
- *   Meeting selected →  fetch sessions, reset session
+ *   Season selected  →  fetch meetings, reset meeting
+ *   Meeting selected →  fetch sessions
  *
  * All other data (laps, car data, positions, …) must be fetched by individual
- * pages/components using `selectedSessionKey` from this context.
+ * pages after resolving a session from the current meeting's session list.
  */
 
 import {
@@ -34,7 +34,7 @@ export interface F1DataState {
   // ─── Selections ──────────────────────────────────────────────────────────
   selectedSeason: string;
   selectedMeetingKey: number | null;
-  selectedSessionKey: number | null;
+  sessionModes: SessionModeState;
 
   // ─── Meetings ─────────────────────────────────────────────────────────────
   meetings: Meeting[];
@@ -47,12 +47,27 @@ export interface F1DataState {
   sessionsError: string | null;
 }
 
+export type SessionVariant = "main" | "sprint";
+export type SessionModeScope = "raceStrategy" | "liveReplay" | "qualifying";
+
+export interface SessionModeState {
+  raceStrategy: SessionVariant;
+  liveReplay: SessionVariant;
+  qualifying: SessionVariant;
+}
+
+const DEFAULT_SESSION_MODES: SessionModeState = {
+  raceStrategy: "main",
+  liveReplay: "main",
+  qualifying: "main",
+};
+
 const currentYear = String(new Date().getFullYear());
 
 const initialState: F1DataState = {
   selectedSeason: currentYear,
   selectedMeetingKey: null,
-  selectedSessionKey: null,
+  sessionModes: DEFAULT_SESSION_MODES,
 
   meetings: [],
   meetingsLoading: false,
@@ -68,7 +83,7 @@ const initialState: F1DataState = {
 type Action =
   | { type: "SET_SEASON"; payload: string }
   | { type: "SET_MEETING_KEY"; payload: number | null }
-  | { type: "SET_SESSION_KEY"; payload: number | null };
+  | { type: "SET_SESSION_MODE"; payload: { scope: SessionModeScope; variant: SessionVariant } };
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 
@@ -81,7 +96,7 @@ function reducer(state: F1DataState, action: Action): F1DataState {
         selectedSeason: action.payload,
         // Reset downstream selections and data
         selectedMeetingKey: null,
-        selectedSessionKey: null,
+        sessionModes: DEFAULT_SESSION_MODES,
         meetings: [],
         sessions: [],
         meetingsError: null,
@@ -93,13 +108,19 @@ function reducer(state: F1DataState, action: Action): F1DataState {
         ...state,
         selectedMeetingKey: action.payload,
         // Reset downstream selections and data
-        selectedSessionKey: null,
+        sessionModes: DEFAULT_SESSION_MODES,
         sessions: [],
         sessionsError: null,
       };
 
-    case "SET_SESSION_KEY":
-      return { ...state, selectedSessionKey: action.payload };
+    case "SET_SESSION_MODE":
+      return {
+        ...state,
+        sessionModes: {
+          ...state.sessionModes,
+          [action.payload.scope]: action.payload.variant,
+        },
+      };
 
     default:
       return state;
@@ -116,7 +137,7 @@ interface F1DataContextValue {
   // action shapes)
   setSeason: (season: string) => void;
   setMeetingKey: (meetingKey: number | null) => void;
-  setSessionKey: (sessionKey: number | null) => void;
+  setSessionMode: (scope: SessionModeScope, variant: SessionVariant) => void;
 }
 
 const F1DataContext = createContext<F1DataContextValue | null>(null);
@@ -173,8 +194,8 @@ export function F1DataProvider({ children }: F1DataProviderProps) {
     dispatch({ type: "SET_MEETING_KEY", payload: meetingKey });
   }, []);
 
-  const setSessionKey = useCallback((sessionKey: number | null) => {
-    dispatch({ type: "SET_SESSION_KEY", payload: sessionKey });
+  const setSessionMode = useCallback((scope: SessionModeScope, variant: SessionVariant) => {
+    dispatch({ type: "SET_SESSION_MODE", payload: { scope, variant } });
   }, []);
 
   // Default to the latest meeting when a season's cached/query data arrives.
@@ -182,15 +203,6 @@ export function F1DataProvider({ children }: F1DataProviderProps) {
     if (state.selectedMeetingKey !== null || meetings.length === 0) return;
     dispatch({ type: "SET_MEETING_KEY", payload: meetings[meetings.length - 1].meeting_key });
   }, [meetings, state.selectedMeetingKey]);
-
-  // Default to the latest completed/current session for the selected meeting.
-  useEffect(() => {
-    if (state.selectedSessionKey !== null || sessions.length === 0) return;
-    const now = new Date();
-    const past = sessions.filter((session) => new Date(session.date_start) <= now);
-    const latest = past.length > 0 ? past[past.length - 1] : sessions[0];
-    dispatch({ type: "SET_SESSION_KEY", payload: latest.session_key });
-  }, [sessions, state.selectedSessionKey]);
 
   const contextState = useMemo<F1DataState>(() => ({
     ...state,
@@ -211,7 +223,7 @@ export function F1DataProvider({ children }: F1DataProviderProps) {
   ]);
 
   return (
-    <F1DataContext.Provider value={{ state: contextState, dispatch, setSeason, setMeetingKey, setSessionKey }}>
+    <F1DataContext.Provider value={{ state: contextState, dispatch, setSeason, setMeetingKey, setSessionMode }}>
       {children}
     </F1DataContext.Provider>
   );
@@ -225,7 +237,7 @@ export function F1DataProvider({ children }: F1DataProviderProps) {
  * @throws If used outside of `<F1DataProvider>`.
  *
  * @example
- * const { state, setSeason, setMeetingKey, setSessionKey } = useF1Data();
+ * const { state, setSeason, setMeetingKey, setSessionMode } = useF1Data();
  */
 export function useF1Data(): F1DataContextValue {
   const ctx = useContext(F1DataContext);
@@ -248,9 +260,9 @@ export function useSelectedMeetingKey() {
   return useF1Data().state.selectedMeetingKey;
 }
 
-/** Returns the currently selected session_key (or null). */
-export function useSelectedSessionKey() {
-  return useF1Data().state.selectedSessionKey;
+/** Returns the selected page-specific main/sprint mode. */
+export function useSessionMode(scope: SessionModeScope): SessionVariant {
+  return useF1Data().state.sessionModes[scope];
 }
 
 /** Returns the full list of meetings for the current season. */

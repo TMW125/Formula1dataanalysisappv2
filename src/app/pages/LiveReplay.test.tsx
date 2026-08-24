@@ -13,12 +13,21 @@ if (typeof ResizeObserver === "undefined") {
 
 const mocks = vi.hoisted(() => ({
   session: null as Session | null,
+  status: "missing" as "missing" | "in_progress" | "completed",
   useReplayData: vi.fn(),
 }));
 
 vi.mock("../hooks/useSessionData", () => ({
-  useCurrentSession: () => mocks.session,
   useCircuitInfo: () => ({ circuitInfo: null, loading: false }),
+}));
+
+vi.mock("../hooks/useSessionScope", () => ({
+  useResolvedSession: () => ({ session: mocks.session, status: mocks.status, supportsSprint: false }),
+}));
+
+vi.mock("../context/F1DataContext", () => ({
+  useF1Data: () => ({ setSessionMode: vi.fn() }),
+  useSessionMode: () => "main",
 }));
 
 vi.mock("../hooks/useReplayData", () => ({
@@ -34,24 +43,27 @@ describe("LiveReplay", () => {
     HTMLMediaElement.prototype.pause = vi.fn();
     HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
     mocks.session = null;
+    mocks.status = "missing";
     mocks.useReplayData.mockReturnValue({ dataset: null, loading: false, locationReady: false, buffering: false, errors: {}, retry: vi.fn() });
   });
 
-  it("guides the user when no session is selected", () => {
+  it("guides the user when no replay session is available", () => {
     render(<LiveReplay />);
-    expect(screen.getByRole("heading", { name: "No session selected" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Replay session unavailable" })).toBeInTheDocument();
   });
 
   it("does not request replay data for an unfinished session", () => {
     mocks.session = { session_key: 1, meeting_key: 1, session_name: "Race", session_type: "Race", date_start: new Date(Date.now() - 1000).toISOString(), date_end: new Date(Date.now() + 60_000).toISOString(), year: 2026, location: "Test", country_name: "GB", circuit_short_name: "Test Ring" };
+    mocks.status = "in_progress";
     render(<LiveReplay />);
-    expect(screen.getByText("Replay available after the session ends")).toBeInTheDocument();
+    expect(screen.getByText("Analysis and replay will be available after the session ends.")).toBeInTheDocument();
     expect(mocks.useReplayData).toHaveBeenCalledWith(null, expect.any(Number));
   });
 
   it("offers retry when a supporting endpoint fails", () => {
     const retry = vi.fn();
     mocks.session = { session_key: 1, meeting_key: 1, session_name: "Race", session_type: "Race", date_start: "2024-01-01T12:00:00Z", date_end: "2024-01-01T13:00:00Z", year: 2024, location: "Test", country_name: "GB", circuit_short_name: "Test Ring" };
+    mocks.status = "completed";
     mocks.useReplayData.mockReturnValue({ dataset: null, loading: false, locationReady: false, buffering: false, errors: { radio: "failed" }, retry });
     render(<LiveReplay />);
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));

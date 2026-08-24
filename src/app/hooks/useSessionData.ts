@@ -1,39 +1,23 @@
 /**
- * Session-scoped data hooks.
+ * Explicit session-scoped data hooks.
  *
- * Every OpenF1 request is backed by a TanStack Query. The query key contains
- * the complete request identity, so pages can safely mount/unmount while the
- * same result and in-flight request remain shared in the app cache.
+ * Session keys are passed by page-level resolvers. This keeps the selected
+ * weekend global while preventing one page's session choice from leaking into
+ * another page.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  useF1Data,
-  useMeetings,
-  useSelectedMeetingKey,
-  useSelectedSeason,
-  useSelectedSessionKey,
-  useSessions,
-} from "../context/F1DataContext";
+import { useMeetings, useSelectedMeetingKey, useSelectedSeason, useSessions } from "../context/F1DataContext";
 import {
   getCarData,
-  getChampionshipDrivers,
-  getChampionshipTeams,
   getDrivers,
   getIntervals,
   getLaps,
-  getLocation,
-  getMeetingByKey,
-  getOvertakes,
   getPits,
   getPositions,
   getRaceControl,
   getSessionResults,
-  getSessionsByMeeting,
-  getStartingGrid,
   getStints,
-  getTeamRadio,
   getWeather,
 } from "../services/openf1Api";
 import type {
@@ -51,9 +35,7 @@ import type {
   Weather,
 } from "../types/openf1";
 import { QUERY_GC_TIME, QUERY_STALE_TIME } from "../queryClient";
-import { explorerEndpointKey, openF1QueryKey, openF1QueryKeys, type OpenF1Endpoint } from "../queryKeys";
-
-// ─── Shared result shape ──────────────────────────────────────────────────────
+import { openF1QueryKey, openF1QueryKeys, type OpenF1Endpoint } from "../queryKeys";
 
 export interface FetchState<T> {
   data: T[];
@@ -73,11 +55,11 @@ function emptyQueryKey(endpoint: Exclude<OpenF1Endpoint, "meetings" | "sessions"
 function useSessionQuery<T>(
   endpoint: Exclude<OpenF1Endpoint, "meetings" | "sessions">,
   fetcher: (sessionKey: number, signal: AbortSignal) => Promise<T[]>,
+  sessionKey: number | null,
   enabledOverride = true,
 ): FetchState<T> {
   const season = useSelectedSeason();
   const meetingKey = useSelectedMeetingKey();
-  const sessionKey = useSelectedSessionKey();
   const enabled = enabledOverride && sessionKey !== null && meetingKey !== null;
   const query = useQuery<T[], Error>({
     queryKey: enabled
@@ -97,84 +79,55 @@ function useSessionQuery<T>(
   };
 }
 
-// ─── Current session object ───────────────────────────────────────────────────
-
-/** Returns the full Session object for the currently selected session key. */
-export function useCurrentSession(): Session | null {
-  const { state } = useF1Data();
+export function useCurrentSession(sessionKey: number | null): Session | null {
   const { sessions } = useSessions();
-  return sessions.find((session) => session.session_key === state.selectedSessionKey) ?? null;
+  return sessions.find((session) => session.session_key === sessionKey) ?? null;
 }
 
-// ─── Per-resource hooks ───────────────────────────────────────────────────────
-
-/** All drivers who participated in the current session. */
-export function useDriversData(options: { enabled?: boolean } = {}): FetchState<OpenF1Driver> {
-  return useSessionQuery(
-    "drivers",
-    (sessionKey, signal) => getDrivers(sessionKey, undefined, signal),
-    options.enabled ?? true,
-  );
+export function useDriversData(sessionKey: number | null, options: { enabled?: boolean } = {}): FetchState<OpenF1Driver> {
+  return useSessionQuery("drivers", (key, signal) => getDrivers(key, undefined, signal), sessionKey, options.enabled ?? true);
 }
 
-/** All lap records for the current session. */
-export function useLapsData(): FetchState<Lap> {
-  return useSessionQuery("laps", (sessionKey, signal) => getLaps(sessionKey, undefined, signal));
+export function useLapsData(sessionKey: number | null): FetchState<Lap> {
+  return useSessionQuery("laps", (key, signal) => getLaps(key, undefined, signal), sessionKey);
 }
 
-/** Weather samples for the current session. */
-export function useWeatherData(): FetchState<Weather> {
-  return useSessionQuery("weather", (sessionKey, signal) => getWeather(sessionKey, signal));
+export function useWeatherData(sessionKey: number | null): FetchState<Weather> {
+  return useSessionQuery("weather", (key, signal) => getWeather(key, signal), sessionKey);
 }
 
-/** Tyre stints for the current session. */
-export function useStintsData(): FetchState<Stint> {
-  return useSessionQuery("stints", (sessionKey, signal) => getStints(sessionKey, undefined, signal));
+export function useStintsData(sessionKey: number | null): FetchState<Stint> {
+  return useSessionQuery("stints", (key, signal) => getStints(key, undefined, signal), sessionKey);
 }
 
-/** Pit stop records for the current session. */
-export function usePitsData(): FetchState<Pit> {
-  return useSessionQuery("pits", (sessionKey, signal) => getPits(sessionKey, undefined, signal));
+export function usePitsData(sessionKey: number | null): FetchState<Pit> {
+  return useSessionQuery("pits", (key, signal) => getPits(key, undefined, signal), sessionKey);
 }
 
-/** Position history for the current session. */
-export function usePositionsData(): FetchState<Position> {
-  return useSessionQuery("positions", (sessionKey, signal) => getPositions(sessionKey, undefined, signal));
+export function usePositionsData(sessionKey: number | null): FetchState<Position> {
+  return useSessionQuery("positions", (key, signal) => getPositions(key, undefined, signal), sessionKey);
 }
 
-/** Interval/gap data for the current session. */
-export function useIntervalsData(): FetchState<Interval> {
-  return useSessionQuery("intervals", (sessionKey, signal) => getIntervals(sessionKey, undefined, signal));
+export function useIntervalsData(sessionKey: number | null): FetchState<Interval> {
+  return useSessionQuery("intervals", (key, signal) => getIntervals(key, undefined, signal), sessionKey);
 }
 
-/** Race control messages for the current session. */
-export function useRaceControlData(): FetchState<RaceControlEvent> {
-  return useSessionQuery("race_control", (sessionKey, signal) => getRaceControl(sessionKey, signal));
+export function useRaceControlData(sessionKey: number | null): FetchState<RaceControlEvent> {
+  return useSessionQuery("race_control", (key, signal) => getRaceControl(key, signal), sessionKey);
 }
 
-/** Final session results (positions, gaps, DNF/DNS/DSQ). */
-export function useSessionResultsData(): FetchState<SessionResult> {
-  return useSessionQuery("session_result", (sessionKey, signal) => getSessionResults(sessionKey, signal));
+export function useSessionResultsData(sessionKey: number | null): FetchState<SessionResult> {
+  return useSessionQuery("session_result", (key, signal) => getSessionResults(key, signal), sessionKey);
 }
 
-// ─── Driver-scoped car data ───────────────────────────────────────────────────
-
-/** Car telemetry for one selected driver in the current session. */
-export function useCarDataForDriver(driverNumber: number | null): FetchState<CarData> {
+export function useCarDataForDriver(sessionKey: number | null, driverNumber: number | null): FetchState<CarData> {
   const season = useSelectedSeason();
   const meetingKey = useSelectedMeetingKey();
-  const sessionKey = useSelectedSessionKey();
   const enabled = sessionKey !== null && meetingKey !== null && driverNumber !== null;
   const query = useQuery<CarData[], Error>({
     queryKey: enabled
       ? openF1QueryKeys.session(season, meetingKey, sessionKey, "car_data", driverNumber)
-      : openF1QueryKey({
-          season,
-          meetingKey,
-          sessionKey,
-          endpoint: "car_data",
-          driverNumber,
-        }),
+      : openF1QueryKey({ season, meetingKey, sessionKey, endpoint: "car_data", driverNumber }),
     queryFn: ({ signal }) => getCarData(sessionKey!, driverNumber!, signal),
     enabled,
     staleTime: QUERY_STALE_TIME.historical,
@@ -188,126 +141,6 @@ export function useCarDataForDriver(driverNumber: number | null): FetchState<Car
     refetch: () => { void query.refetch(); },
   };
 }
-
-// ─── Data Explorer generic hook ───────────────────────────────────────────────
-
-export type ExplorerEndpoint =
-  | "laps"
-  | "car_data"
-  | "drivers"
-  | "positions"
-  | "stints"
-  | "weather"
-  | "intervals"
-  | "pit"
-  | "race_control"
-  | "session_result"
-  | "location"
-  | "team_radio"
-  | "overtakes"
-  | "starting_grid"
-  | "championship_drivers"
-  | "championship_teams"
-  | "meetings"
-  | "sessions";
-
-const NO_DRIVER_FILTER: ReadonlySet<ExplorerEndpoint> = new Set([
-  "weather",
-  "race_control",
-  "session_result",
-  "overtakes",
-  "starting_grid",
-  "championship_drivers",
-  "championship_teams",
-  "meetings",
-  "sessions",
-]);
-
-function explorerCanFetch(endpoint: ExplorerEndpoint, sessionKey: number | null, meetingKey: number | null) {
-  return endpoint === "meetings" || endpoint === "sessions" ? meetingKey !== null : sessionKey !== null;
-}
-
-/**
- * Data Explorer is intentionally disabled until its returned `refetch` action
- * is called. Changing endpoint or driver resets that request gate, so merely
- * browsing the selector never starts a new OpenF1 request.
- */
-export function useExplorerData(
-  endpoint: ExplorerEndpoint,
-  driverNumber: number | null,
-): FetchState<Record<string, unknown>> {
-  const season = useSelectedSeason();
-  const sessionKey = useSelectedSessionKey();
-  const selectedMeetingKey = useSelectedMeetingKey();
-  const currentSession = useCurrentSession();
-  const meetingKey = currentSession?.meeting_key ?? selectedMeetingKey;
-  const effectiveDriverNumber = NO_DRIVER_FILTER.has(endpoint) ? null : driverNumber;
-  const canonicalEndpoint = explorerEndpointKey(endpoint);
-  const queryKey = useMemo(() => {
-    if (endpoint === "meetings" || endpoint === "sessions") {
-      return openF1QueryKey({ season, meetingKey, endpoint: canonicalEndpoint });
-    }
-    return openF1QueryKey({
-      season,
-      meetingKey,
-      sessionKey,
-      endpoint: canonicalEndpoint,
-      driverNumber: effectiveDriverNumber,
-    });
-  }, [canonicalEndpoint, effectiveDriverNumber, endpoint, meetingKey, season, sessionKey]);
-  const queryHash = JSON.stringify(queryKey);
-  const [requestedKey, setRequestedKey] = useState<string | null>(null);
-  const canFetch = explorerCanFetch(endpoint, sessionKey, meetingKey);
-
-  useEffect(() => {
-    setRequestedKey(null);
-  }, [queryHash]);
-
-  const query = useQuery<unknown[], Error>({
-    queryKey,
-    queryFn: ({ signal }) => {
-      const driver = effectiveDriverNumber ?? undefined;
-      switch (endpoint) {
-        case "laps": return getLaps(sessionKey!, driver, signal);
-        case "car_data": return getCarData(sessionKey!, driver, signal);
-        case "drivers": return getDrivers(sessionKey!, driver, signal);
-        case "positions": return getPositions(sessionKey!, driver, signal);
-        case "stints": return getStints(sessionKey!, driver, signal);
-        case "weather": return getWeather(sessionKey!, signal);
-        case "intervals": return getIntervals(sessionKey!, driver, signal);
-        case "pit": return getPits(sessionKey!, driver, signal);
-        case "race_control": return getRaceControl(sessionKey!, signal);
-        case "session_result": return getSessionResults(sessionKey!, signal);
-        case "location": return getLocation(sessionKey!, driver, signal);
-        case "team_radio": return getTeamRadio(sessionKey!, driver, signal);
-        case "overtakes": return getOvertakes(sessionKey!, signal);
-        case "starting_grid": return getStartingGrid(sessionKey!, signal);
-        case "championship_drivers": return getChampionshipDrivers(sessionKey!, signal);
-        case "championship_teams": return getChampionshipTeams(sessionKey!, signal);
-        case "meetings": return meetingKey === null ? Promise.resolve([]) : getMeetingByKey(meetingKey);
-        case "sessions": return meetingKey === null ? Promise.resolve([]) : getSessionsByMeeting(meetingKey);
-      }
-    },
-    enabled: canFetch && requestedKey === queryHash,
-    staleTime: QUERY_STALE_TIME.standard,
-    gcTime: QUERY_GC_TIME.standard,
-  });
-
-  const requested = requestedKey === queryHash;
-  const refetch = useCallback(() => {
-    if (requested) void query.refetch();
-    setRequestedKey(queryHash);
-  }, [query.refetch, queryHash, requested]);
-
-  return {
-    data: requested ? (query.data as Record<string, unknown>[] | undefined) ?? [] : [],
-    loading: requested && query.isPending,
-    error: requested ? errorMessage(query.error) : null,
-    refetch,
-  };
-}
-
-// ─── Circuit info ─────────────────────────────────────────────────────────────
 
 export function useCircuitInfo(): { circuitInfo: CircuitInfo | null; loading: boolean } {
   const meetingKey = useSelectedMeetingKey();

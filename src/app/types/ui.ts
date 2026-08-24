@@ -62,8 +62,13 @@ export const TIRE_TEXT_COLORS: Record<TireCompound, string> = {
 
 // ─── Chart line config ────────────────────────────────────────────────────────
 
+export type DriverLineStyle = "solid" | "dashed";
+
+export const DRIVER_DASH_PATTERN = "6 4";
+
 export interface ChartLineConfig {
   key: string;
   color: string;
   name: string;
+  lineStyle?: DriverLineStyle;
 }

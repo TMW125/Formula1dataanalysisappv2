@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DRIVER_DASH_PATTERN } from "../../types/ui";
 import { formatLapTime, type StrategyLineSeries } from "../../utils/transformers";
 
 const CHART_HEIGHT = 340;
@@ -78,13 +79,14 @@ export function LapTimeViolinChart({ series }: { series: StrategyLineSeries[] })
     : MARGIN.top;
 
   return <div ref={containerRef} className="w-full min-w-0">
-    {!plot ? <div className="h-[280px] flex items-center justify-center border border-dashed border-border rounded-md text-sm text-muted-foreground text-center px-6">Lap-time distribution data is unavailable for the selected drivers.</div> : width > 0 ? <svg
-      width={width}
-      height={CHART_HEIGHT}
-      role="img"
-      aria-label="Violin plot comparing the distribution of cleaned lap times for each selected driver"
-      className="block overflow-visible"
-    >
+    {!plot ? <div className="h-[280px] flex items-center justify-center border border-dashed border-border rounded-md text-sm text-muted-foreground text-center px-6">Lap-time distribution data is unavailable for the selected drivers.</div> : width > 0 ? <div>
+      <svg
+        width={width}
+        height={CHART_HEIGHT}
+        role="img"
+        aria-label="Violin plot comparing the distribution of cleaned lap times for each selected driver"
+        className="block overflow-visible"
+      >
       <title>Lap-time distribution by driver</title>
       {plot.ticks.map((tick) => {
         const y = yFor(tick);
@@ -106,11 +108,12 @@ export function LapTimeViolinChart({ series }: { series: StrategyLineSeries[] })
         const medianY = yFor(violin.median);
         return <g key={violin.key} tabIndex={0} aria-label={`${violin.name}: ${violin.values.length} laps, median ${formatLapTime(violin.median)}`}>
           <title>{`${violin.name}: ${violin.values.length} laps, median ${formatLapTime(violin.median)}`}</title>
-          <path d={`M${left[0]} L${left.slice(1).join(" L")} L${right.join(" L")} Z`} fill={violin.color} fillOpacity={0.45} stroke={violin.color} strokeWidth={2} />
+          <path d={`M${left[0]} L${left.slice(1).join(" L")} L${right.join(" L")} Z`} fill={violin.color} fillOpacity={0.45} stroke={violin.color} strokeWidth={2} strokeDasharray={violin.lineStyle === "dashed" ? DRIVER_DASH_PATTERN : undefined} />
           <line x1={centerX - halfWidth * 0.42} x2={centerX + halfWidth * 0.42} y1={medianY} y2={medianY} stroke="#f5f5f5" strokeWidth={2} />
           <text x={centerX} y={CHART_HEIGHT - 18} textAnchor="middle" fill={violin.color} fontSize={12} fontWeight={600}>{violin.name}</text>
         </g>;
       })}
-    </svg> : <div className="h-[340px]" />}
+      </svg>
+    </div> : <div className="h-[340px]" />}
   </div>;
 }

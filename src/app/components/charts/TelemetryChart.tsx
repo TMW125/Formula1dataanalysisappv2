@@ -1,8 +1,17 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import type { DriverSeriesLegendItem } from "./DriverLineStyleLegend";
+import { DRIVER_DASH_PATTERN, type DriverLineStyle } from "../../types/ui";
+
+interface TelemetryLineConfig extends DriverSeriesLegendItem {
+  key: string;
+  color: string;
+  name: string;
+  lineStyle?: DriverLineStyle;
+}
 
 interface TelemetryChartProps {
   data: any[];
-  dataKeys: { key: string; color: string; name: string }[];
+  dataKeys: TelemetryLineConfig[];
   xKey: string;
   title: string;
   yAxisLabel?: string;
@@ -55,17 +64,13 @@ domain={['dataMin', 'dataMax']}
             }}
             labelStyle={{ color: "#9ca3af" }}
           />
-          <Legend
-            wrapperStyle={{ paddingTop: "10px" }}
-            iconType="line"
-            formatter={(value) => <span style={{ color: "#f5f5f5" }}>{value}</span>}
-          />
           {dataKeys.map((item) => (
             <Line
               key={item.key}
               type="monotone"
               dataKey={item.key}
               stroke={item.color}
+              strokeDasharray={item.lineStyle === "dashed" ? DRIVER_DASH_PATTERN : undefined}
               name={item.name}
               dot={false}
               strokeWidth={2}

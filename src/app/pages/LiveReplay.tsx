@@ -7,7 +7,6 @@ import {
   Pause,
   Play,
   Radio,
-  RotateCcw,
   SkipBack,
   Thermometer,
   Volume2,
@@ -17,7 +16,11 @@ import { ReplayTrackMap } from "../components/ReplayTrackMap";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { useReplayController, REPLAY_SPEEDS, type ReplaySpeed } from "../hooks/useReplayController";
 import { useReplayData } from "../hooks/useReplayData";
-import { useCircuitInfo, useCurrentSession } from "../hooks/useSessionData";
+import { useCircuitInfo } from "../hooks/useSessionData";
+import { useF1Data, useSessionMode } from "../context/F1DataContext";
+import { useResolvedSession } from "../hooks/useSessionScope";
+import { SessionAvailability } from "../components/SessionAvailability";
+import { SessionVariantToggle } from "../components/SessionVariantToggle";
 import { buildReplayFrame, createReplayIndex, getReplayEnd, isTimelineMarkerEvent } from "../replay/replayEngine";
 import type { ReplayDriverState, ReplayEvent } from "../replay/types";
 import { TIRE_COLORS } from "../types/ui";
@@ -210,12 +213,15 @@ export function ReplayControls(props: ControlsProps) {
 }
 
 export function LiveReplay() {
-  const selectedSession = useCurrentSession();
+  const { setSessionMode } = useF1Data();
+  const variant = useSessionMode("liveReplay");
+  const resolution = useResolvedSession("race", variant);
+  const selectedSession = resolution.session;
   const { circuitInfo } = useCircuitInfo();
   const rawStart = selectedSession ? Date.parse(selectedSession.date_start) : 0;
   const rawEnd = selectedSession ? Date.parse(selectedSession.date_end) : 0;
   const validDates = Number.isFinite(rawStart) && Number.isFinite(rawEnd) && rawEnd > rawStart;
-  const completed = validDates && rawEnd <= Date.now();
+  const completed = resolution.status === "completed" && validDates;
   const replaySession = selectedSession && completed ? selectedSession : null;
   const canAdvanceRef = useRef(false);
   const replayEndRef = useRef(0);
@@ -234,7 +240,6 @@ export function LiveReplay() {
   replayEndRef.current = replayEnd;
   const replayIndex = useMemo(() => replayData.dataset ? createReplayIndex(replayData.dataset) : null, [replayData.dataset]);
   const frame = useMemo(() => replayIndex ? buildReplayFrame(replayIndex, controller.currentTime) : null, [replayIndex, controller.currentTime]);
-  const allEvents = replayIndex?.events ?? [];
   const timelineEvents = useMemo(
     () => replayIndex?.events.filter(isTimelineMarkerEvent) ?? [],
     [replayIndex]
@@ -297,14 +302,17 @@ export function LiveReplay() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [controller.seek, controller.toggle, rawStart, replayEnd, rawEnd]);
 
+  if (resolution.status === "loading") {
+    return <div className="flex min-h-[60vh] items-center justify-center"><LoadingSpinner /></div>;
+  }
+  if (!validDates || !completed) {
+    return <div className="space-y-5 p-4 lg:p-6">
+      <header className="flex flex-wrap items-end justify-between gap-3"><div><div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-primary"><span className="h-2 w-2 rounded-full bg-primary" />Live Replay</div><h1 className="text-3xl tracking-tight">{selectedSession?.session_name ?? "Live Replay"}</h1></div><SessionVariantToggle value={variant} onChange={(value) => setSessionMode("liveReplay", value)} supportsSprint={resolution.supportsSprint} mainLabel="Race" sprintLabel="Sprint" ariaLabel="Live replay session" /></header>
+      {!validDates && resolution.status !== "missing" ? <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-6"><h2 className="text-xl">Replay unavailable</h2><p className="mt-2 text-sm text-muted-foreground">This session has invalid scheduling information.</p></div> : <SessionAvailability session={selectedSession} status={resolution.status} title="Replay session unavailable" />}
+    </div>;
+  }
   if (!selectedSession) {
-    return <div className="p-6"><div className="flex h-64 flex-col items-center justify-center rounded-lg border border-border bg-card text-center"><RotateCcw className="mb-3 h-10 w-10 text-muted-foreground" /><h1 className="text-xl">No session selected</h1><p className="mt-2 text-sm text-muted-foreground">Choose a season, race weekend, and session above to load a replay.</p></div></div>;
-  }
-  if (!validDates) {
-    return <div className="p-6"><div className="rounded-lg border border-destructive/40 bg-destructive/10 p-6"><h1 className="text-xl">Replay unavailable</h1><p className="text-sm text-muted-foreground">This session has invalid start or end timestamps.</p></div></div>;
-  }
-  if (!completed) {
-    return <div className="p-6"><div className="flex h-64 flex-col items-center justify-center rounded-lg border border-border bg-card text-center"><Flag className="mb-3 h-10 w-10 text-primary" /><h1 className="text-xl">Replay available after the session ends</h1><p className="mt-2 text-sm text-muted-foreground">Live-session API access is not used. Return after {new Date(rawEnd).toLocaleString()}.</p></div></div>;
+    return <div className="p-6"><SessionAvailability session={null} status="missing" title="Replay session unavailable" /></div>;
   }
 
   const errorEntries = Object.entries(replayData.errors);
@@ -313,6 +321,7 @@ export function LiveReplay() {
       <audio ref={audioRef} onEnded={() => setActiveRadio(null)} className="hidden" />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div><div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-primary"><span className="h-2 w-2 rounded-full bg-primary" />Live Replay</div><h1 className="text-3xl tracking-tight">{selectedSession.session_name}</h1><p className="text-sm text-muted-foreground">{selectedSession.location} · {selectedSession.circuit_short_name}</p></div>
+        <SessionVariantToggle value={variant} onChange={(value) => setSessionMode("liveReplay", value)} supportsSprint={resolution.supportsSprint} mainLabel="Race" sprintLabel="Sprint" ariaLabel="Live replay session" />
         <div className="text-right"><p className="font-mono text-2xl font-bold">{formatDuration(controller.currentTime - rawStart)}</p><p className="text-xs uppercase tracking-wider text-muted-foreground">Lap {frame?.currentLap || "—"} · {controller.playing ? replayData.buffering ? "Buffering" : "Playing" : controller.currentTime >= replayEnd ? "Complete" : "Paused"}</p></div>
       </header>
 

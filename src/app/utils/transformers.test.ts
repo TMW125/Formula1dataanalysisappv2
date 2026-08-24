@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { Lap, OpenF1Driver, Pit, Position, SessionResult, Stint } from "../types/openf1";
+import type { Interval, Lap, OpenF1Driver, Pit, Position, SessionResult, Stint } from "../types/openf1";
 import {
-  buildCumulativeDeltaSeries,
+  buildDriverVisualStyleMap,
   buildDefaultDriverSelection,
   buildDegradationSeries,
   buildLapTimeSeries,
   buildPositionSeries,
+  buildRunningGapSeries,
+  formatLapTime,
+  getBestLap,
 } from "./transformers";
 
 const driver = (driver_number: number, name_acronym: string): OpenF1Driver => ({
@@ -37,6 +40,20 @@ const lap = (driver_number: number, lap_number: number, lap_duration: number, da
   is_pit_out_lap: false,
 });
 
+const interval = (
+  driver_number: number,
+  date: string,
+  gap_to_leader: number | string | null,
+  intervalValue: number | string | null = gap_to_leader,
+): Interval => ({
+  driver_number,
+  date,
+  gap_to_leader,
+  interval: intervalValue,
+  session_key: 10,
+  meeting_key: 20,
+});
+
 const result = (driver_number: number, position: number, dnf = false): SessionResult => ({
   driver_number,
   position,
@@ -51,19 +68,105 @@ const result = (driver_number: number, position: number, dnf = false): SessionRe
 });
 
 describe("race strategy transformers", () => {
+  it("returns the fastest lap and keeps its driver number", () => {
+    const laps = [lap(2, 1, 91.2), lap(1, 1, 90.5), lap(2, 2, 89.9), lap(1, 2, 0)];
+    const best = getBestLap(laps);
+
+    expect(best?.driver_number).toBe(2);
+    expect(best?.lap_duration).toBe(89.9);
+    expect(formatLapTime(best!.lap_duration)).toBe("1:29.900");
+  });
+
+  it("assigns stable solid and dashed styles within each team", () => {
+    const alphaFirst = { ...driver(1, "ONE"), team_name: "Alpha" };
+    const alphaSecond = { ...driver(11, "ELEVEN"), team_name: "Alpha" };
+    const beta = { ...driver(2, "TWO"), team_name: "Beta" };
+    const missingTeamFirst = { ...driver(4, "FOUR"), team_name: "", team_colour: "abcdef" };
+    const missingTeamSecond = { ...driver(5, "FIVE"), team_name: "", team_colour: "abcdef" };
+    const styles = buildDriverVisualStyleMap([alphaSecond, beta, missingTeamSecond, alphaFirst, missingTeamFirst]);
+
+    expect(styles.get(1)).toEqual({ color: "#ff0000", lineStyle: "solid" });
+    expect(styles.get(11)).toEqual({ color: "#0000ff", lineStyle: "dashed" });
+    expect(styles.get(2)?.lineStyle).toBe("solid");
+    expect(styles.get(4)?.lineStyle).toBe("solid");
+    expect(styles.get(5)?.lineStyle).toBe("dashed");
+  });
+
   it("selects the highest classified finishers and excludes retirements", () => {
     const drivers = [driver(1, "ONE"), driver(2, "TWO"), driver(3, "THR")];
     expect(buildDefaultDriverSelection(drivers, [result(3, 1, true), result(2, 2), result(1, 3)], [], 2)).toEqual([2, 1]);
   });
 
-  it("normalizes cumulative time after lap one and stops at missing data", () => {
+  it("normalizes lap-aligned running gaps against the official race winner", () => {
     const drivers = [driver(1, "ONE"), driver(2, "TWO")];
-    const laps = [lap(1, 1, 100), lap(1, 2, 90), lap(1, 3, 90), lap(2, 1, 102), lap(2, 2, 91)];
-    const built = buildCumulativeDeltaSeries(laps, drivers, [1, 2], [result(1, 1), result(2, 2)]);
-    expect(built.referenceDriverNumber).toBe(1);
-    expect(built.series.find((line) => line.driverNumber === 2)?.values).toEqual([
+    const laps = [
+      lap(1, 1, 90, "2026-01-01T00:00:00Z"), lap(1, 2, 90, "2026-01-01T00:01:30Z"), lap(1, 3, 90, "2026-01-01T00:03:00Z"),
+      lap(2, 1, 90, "2026-01-01T00:00:00Z"), lap(2, 2, 90, "2026-01-01T00:01:30Z"), lap(2, 3, 90, "2026-01-01T00:03:00Z"),
+    ];
+    const intervals = [
+      interval(1, "2026-01-01T00:00:20Z", null),
+      interval(1, "2026-01-01T00:01:40Z", 1.0),
+      interval(1, "2026-01-01T00:03:20Z", null),
+      interval(2, "2026-01-01T00:00:20Z", 0.2),
+      interval(2, "2026-01-01T00:01:40Z", 2.0),
+      interval(2, "2026-01-01T00:02:20Z", 2.2),
+      interval(2, "2026-01-01T00:03:20Z", "+1 LAP"),
+    ];
+    const built = buildRunningGapSeries(laps, intervals, drivers, [1, 2], [result(1, 1), result(2, 2)]);
+
+    expect(built.find((line) => line.driverNumber === 1)?.lineStyle).toBe("solid");
+    expect(built.find((line) => line.driverNumber === 1)?.values).toEqual([
       { lap: 1, value: 0 },
+      { lap: 2, value: 0 },
+      { lap: 3, value: 0 },
+    ]);
+    expect(built.find((line) => line.driverNumber === 2)?.lineStyle).toBe("dashed");
+    expect(built.find((line) => line.driverNumber === 2)?.values).toEqual([
+      { lap: 1, value: 0.2 },
+      { lap: 2, value: 1.2 },
+    ]);
+  });
+
+  it("interpolates missing and lapped lap gaps from surrounding samples", () => {
+    const drivers = [driver(1, "ONE"), driver(2, "TWO")];
+    const laps = [
+      lap(1, 1, 90, "2026-01-01T00:00:00Z"), lap(1, 2, 90, "2026-01-01T00:01:30Z"), lap(1, 3, 90, "2026-01-01T00:03:00Z"),
+      lap(2, 1, 90, "2026-01-01T00:00:00Z"), lap(2, 2, 90, "2026-01-01T00:01:30Z"), lap(2, 3, 90, "2026-01-01T00:03:00Z"),
+    ];
+    const intervals = [
+      interval(1, "2026-01-01T00:00:20Z", null),
+      interval(1, "2026-01-01T00:01:40Z", null, 0.2),
+      interval(1, "2026-01-01T00:03:20Z", null),
+      interval(2, "2026-01-01T00:00:20Z", 0.5),
+      interval(2, "2026-01-01T00:01:40Z", "+1 LAP"),
+      interval(2, "2026-01-01T00:03:20Z", 1.5),
+    ];
+    const built = buildRunningGapSeries(laps, intervals, drivers, [1, 2], [result(1, 1), result(2, 2)]);
+
+    expect(built.find((line) => line.driverNumber === 1)?.values).toEqual([
+      { lap: 1, value: 0 },
+      { lap: 2, value: 0 },
+      { lap: 3, value: 0 },
+    ]);
+    expect(built.find((line) => line.driverNumber === 2)?.values).toEqual([
+      { lap: 1, value: 0.5 },
       { lap: 2, value: 1 },
+      { lap: 3, value: 1.5 },
+    ]);
+  });
+
+  it("keeps a complete running-gap series unchanged", () => {
+    const drivers = [driver(1, "ONE"), driver(2, "TWO")];
+    const laps = [
+      lap(1, 1, 90, "2026-01-01T00:00:00Z"), lap(1, 2, 90, "2026-01-01T00:01:30Z"),
+      lap(2, 1, 90, "2026-01-01T00:00:00Z"), lap(2, 2, 90, "2026-01-01T00:01:30Z"),
+    ];
+    const intervals = [interval(1, "2026-01-01T00:00:20Z", 0), interval(1, "2026-01-01T00:01:40Z", 0), interval(2, "2026-01-01T00:00:20Z", 0.5), interval(2, "2026-01-01T00:01:40Z", 1.5)];
+    const built = buildRunningGapSeries(laps, intervals, drivers, [1, 2], [result(1, 1), result(2, 2)]);
+
+    expect(built.find((line) => line.driverNumber === 2)?.values).toEqual([
+      { lap: 1, value: 0.5 },
+      { lap: 2, value: 1.5 },
     ]);
   });
 

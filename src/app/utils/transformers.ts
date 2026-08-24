@@ -6,8 +6,8 @@
  * inside UI components.
  */
 
-import type { CarData, Lap, OpenF1Driver, Pit, Position, Session, SessionResult, Stint, Weather } from "../types/openf1";
-import type { LeaderboardRow, SessionInfoData, TireCompound } from "../types/ui";
+import type { CarData, Interval, Lap, OpenF1Driver, Pit, Position, Session, SessionResult, Stint, Weather } from "../types/openf1";
+import type { DriverLineStyle, LeaderboardRow, SessionInfoData, TireCompound } from "../types/ui";
 import { TIRE_COLORS } from "../types/ui";
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
@@ -28,6 +28,43 @@ export function formatLapTime(seconds: number): string {
 export function toHexColor(raw: string | null | undefined): string {
   if (!raw) return "#888888";
   return raw.startsWith("#") ? raw : `#${raw}`;
+}
+
+export interface DriverVisualStyle {
+  color: string;
+  lineStyle: DriverLineStyle;
+}
+
+function getDriverTeamKey(driver: OpenF1Driver): string {
+  const teamName = driver.team_name?.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  return teamName ? `name:${teamName}` : `color:${toHexColor(driver.team_colour).toLocaleLowerCase()}`;
+}
+
+/**
+ * Build stable visual styles for a session roster. Drivers retain their team
+ * colour, while the higher-numbered teammate uses a dashed line style.
+ */
+export function buildDriverVisualStyleMap(drivers: OpenF1Driver[]): Map<number, DriverVisualStyle> {
+  const driversByTeam = new Map<string, OpenF1Driver[]>();
+  for (const driver of drivers) {
+    const teamKey = getDriverTeamKey(driver);
+    const teamDrivers = driversByTeam.get(teamKey) ?? [];
+    teamDrivers.push(driver);
+    driversByTeam.set(teamKey, teamDrivers);
+  }
+
+  const styles = new Map<number, DriverVisualStyle>();
+  for (const teamDrivers of driversByTeam.values()) {
+    [...teamDrivers]
+      .sort((a, b) => a.driver_number - b.driver_number)
+      .forEach((driver, index) => {
+        styles.set(driver.driver_number, {
+          color: toHexColor(driver.team_colour),
+          lineStyle: index === 0 ? "solid" : "dashed",
+        });
+      });
+  }
+  return styles;
 }
 
 /**
@@ -132,7 +169,7 @@ export function buildSessionInfo(
       name: "—",
       track: "—",
       weather: "—",
-      status: "No session selected",
+      status: "No completed session",
       temperature: "—",
       remainingTime: "—",
     };
@@ -460,14 +497,16 @@ export interface StrategyLineSeries {
   driverNumber: number;
   name: string;
   color: string;
+  lineStyle: DriverLineStyle;
   values: StrategyLinePoint[];
 }
 
-function driverDetails(drivers: OpenF1Driver[], driverNumber: number) {
+function driverDetails(drivers: OpenF1Driver[], styles: Map<number, DriverVisualStyle>, driverNumber: number) {
   const driver = drivers.find((entry) => entry.driver_number === driverNumber);
+  const visualStyle = styles.get(driverNumber) ?? { color: toHexColor(driver?.team_colour), lineStyle: "solid" as const };
   return {
     name: driver?.name_acronym ?? `#${driverNumber}`,
-    color: toHexColor(driver?.team_colour),
+    ...visualStyle,
   };
 }
 
@@ -475,10 +514,11 @@ export function buildLapTimeSeries(
   laps: Lap[],
   pits: Pit[],
   drivers: OpenF1Driver[],
-  selectedDriverNumbers: number[]
+  selectedDriverNumbers: number[],
+  styles: Map<number, DriverVisualStyle> = buildDriverVisualStyleMap(drivers),
 ): StrategyLineSeries[] {
   return selectedDriverNumbers.map((driverNumber) => {
-    const details = driverDetails(drivers, driverNumber);
+    const details = driverDetails(drivers, styles, driverNumber);
     const pitLapNumbers = new Set(
       pits
         .filter((pit) => pit.driver_number === driverNumber)
@@ -508,59 +548,119 @@ export function buildLapTimeSeries(
   });
 }
 
-export function buildCumulativeDeltaSeries(
-  laps: Lap[],
-  drivers: OpenF1Driver[],
-  selectedDriverNumbers: number[],
-  results: SessionResult[]
-): { referenceDriverNumber: number | null; series: StrategyLineSeries[] } {
-  if (selectedDriverNumbers.length === 0) return { referenceDriverNumber: null, series: [] };
+function parseRunningGap(interval: Interval): number | null {
+  const value = interval.gap_to_leader;
+  // A true race-leader sample has both gaps set to null. A null leader gap
+  // with a numeric interval is an incomplete sample and should be filled.
+  if (value == null) return interval.interval == null ? 0 : null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (!value.trim()) return null;
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
 
-  const selected = new Set(selectedDriverNumbers);
-  const ranked = [...results]
-    .filter((result) => selected.has(result.driver_number) && !result.dnf && !result.dns && !result.dsq)
-    .sort((a, b) => a.position - b.position);
-  const referenceDriverNumber = ranked[0]?.driver_number ?? selectedDriverNumbers[0];
+function interpolateRunningGapHoles(values: Map<number, number>): Map<number, number> {
+  const knownLaps = [...values.keys()].sort((a, b) => a - b);
+  if (knownLaps.length < 2) return values;
 
-  const lapDurations = new Map<number, Map<number, number>>();
-  for (const lap of laps) {
-    if (!selected.has(lap.driver_number) || lap.lap_duration == null || lap.lap_duration <= 0) continue;
-    const driverLaps = lapDurations.get(lap.driver_number) ?? new Map<number, number>();
-    driverLaps.set(lap.lap_number, lap.lap_duration);
-    lapDurations.set(lap.driver_number, driverLaps);
+  const filledValues = new Map(values);
+  for (let index = 0; index < knownLaps.length - 1; index += 1) {
+    const startLap = knownLaps[index];
+    const endLap = knownLaps[index + 1];
+    const span = endLap - startLap;
+    if (span <= 1) continue;
+
+    const startValue = values.get(startLap)!;
+    const endValue = values.get(endLap)!;
+    for (let lap = startLap + 1; lap < endLap; lap += 1) {
+      const progress = (lap - startLap) / span;
+      const value = startValue + (endValue - startValue) * progress;
+      filledValues.set(lap, Number(value.toFixed(3)));
+    }
   }
 
-  const referenceLaps = lapDurations.get(referenceDriverNumber);
-  if (!referenceLaps?.has(1)) return { referenceDriverNumber, series: [] };
+  return filledValues;
+}
 
-  return {
-    referenceDriverNumber,
-    series: selectedDriverNumbers.flatMap((driverNumber) => {
-      const driverLaps = lapDurations.get(driverNumber);
-      if (!driverLaps?.has(1)) return [];
+function buildRunningGapByLap(
+  laps: Lap[],
+  intervals: Interval[],
+  driverNumber: number,
+): Map<number, number> {
+  const driverLaps = laps
+    .filter((lap) => lap.driver_number === driverNumber && Number.isFinite(Date.parse(lap.date_start)))
+    .sort((a, b) => Date.parse(a.date_start) - Date.parse(b.date_start) || a.lap_number - b.lap_number);
+  const driverIntervals = intervals
+    .filter((interval) => interval.driver_number === driverNumber && Number.isFinite(Date.parse(interval.date)))
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const values = new Map<number, number>();
+  if (driverLaps.length === 0 || driverIntervals.length === 0) return values;
 
-      const firstDelta = driverLaps.get(1)! - referenceLaps.get(1)!;
-      let driverTotal = 0;
-      let referenceTotal = 0;
-      const values: StrategyLinePoint[] = [];
-      const maxLap = Math.max(...driverLaps.keys());
+  let intervalIndex = 0;
+  for (let lapIndex = 0; lapIndex < driverLaps.length; lapIndex += 1) {
+    const lap = driverLaps[lapIndex];
+    const lapStart = Date.parse(lap.date_start);
+    const nextLap = driverLaps[lapIndex + 1];
+    const nextLapStart = nextLap ? Date.parse(nextLap.date_start) : Number.POSITIVE_INFINITY;
+    const hasConsecutiveNextLap = nextLap?.lap_number === lap.lap_number + 1;
+    const durationEnd = lap.lap_duration != null && lap.lap_duration > 0
+      ? lapStart + lap.lap_duration * 1000
+      : Number.POSITIVE_INFINITY;
+    const lapEnd = hasConsecutiveNextLap ? nextLapStart : Math.min(nextLapStart, durationEnd);
 
-      for (let lapNumber = 1; lapNumber <= maxLap; lapNumber += 1) {
-        const duration = driverLaps.get(lapNumber);
-        const referenceDuration = referenceLaps.get(lapNumber);
-        if (duration == null || referenceDuration == null) break;
-        driverTotal += duration;
-        referenceTotal += referenceDuration;
-        values.push({
-          lap: lapNumber,
-          value: Number((driverTotal - referenceTotal - firstDelta).toFixed(3)),
-        });
-      }
+    while (intervalIndex < driverIntervals.length && Date.parse(driverIntervals[intervalIndex].date) < lapStart) {
+      intervalIndex += 1;
+    }
 
-      const details = driverDetails(drivers, driverNumber);
-      return [{ key: `delta-${driverNumber}`, driverNumber, ...details, values }];
-    }),
-  };
+    let latestGap: number | null = null;
+    while (intervalIndex < driverIntervals.length) {
+      const interval = driverIntervals[intervalIndex];
+      const timestamp = Date.parse(interval.date);
+      if (timestamp >= lapEnd) break;
+      latestGap = parseRunningGap(interval);
+      intervalIndex += 1;
+    }
+
+    if (latestGap != null) values.set(lap.lap_number, Number(latestGap.toFixed(3)));
+  }
+
+  return interpolateRunningGapHoles(values);
+}
+
+export function buildRunningGapSeries(
+  laps: Lap[],
+  intervals: Interval[],
+  drivers: OpenF1Driver[],
+  selectedDriverNumbers: number[],
+  results: SessionResult[],
+  styles: Map<number, DriverVisualStyle> = buildDriverVisualStyleMap(drivers),
+): StrategyLineSeries[] {
+  if (selectedDriverNumbers.length === 0) return [];
+
+  const winnerNumber = results.find(
+    (result) => result.position === 1 && !result.dnf && !result.dns && !result.dsq,
+  )?.driver_number ?? selectedDriverNumbers[0];
+  const driversToSample = [...new Set([winnerNumber, ...selectedDriverNumbers])];
+  const gapsByDriver = new Map(
+    driversToSample.map((driverNumber) => [driverNumber, buildRunningGapByLap(laps, intervals, driverNumber)]),
+  );
+  const winnerGaps = gapsByDriver.get(winnerNumber);
+  if (!winnerGaps || winnerGaps.size === 0) return [];
+
+  return selectedDriverNumbers.flatMap((driverNumber) => {
+    const driverGaps = gapsByDriver.get(driverNumber);
+    if (!driverGaps) return [];
+    const values: StrategyLinePoint[] = [...driverGaps.entries()]
+      .filter(([lapNumber]) => winnerGaps.has(lapNumber))
+      .sort(([lapA], [lapB]) => lapA - lapB)
+      .map(([lapNumber, gap]) => ({
+        lap: lapNumber,
+        value: Number((gap - winnerGaps.get(lapNumber)!).toFixed(3)),
+      }));
+    if (values.length === 0) return [];
+    const details = driverDetails(drivers, styles, driverNumber);
+    return [{ key: `running-gap-${driverNumber}`, driverNumber, ...details, values }];
+  });
 }
 
 export interface DegradationSeries extends StrategyLineSeries {
@@ -580,7 +680,8 @@ export function buildDegradationSeries(
   laps: Lap[],
   stints: Stint[],
   drivers: OpenF1Driver[],
-  selectedDriverNumbers: number[]
+  selectedDriverNumbers: number[],
+  styles: Map<number, DriverVisualStyle> = buildDriverVisualStyleMap(drivers),
 ): DegradationSeries[] {
   const selected = new Set(selectedDriverNumbers);
 
@@ -618,13 +719,14 @@ export function buildDegradationSeries(
         value: Number(median(rawValues.slice(Math.max(0, index - 2), index + 1).map((item) => item.value)).toFixed(3)),
       }));
 
-      const details = driverDetails(drivers, stint.driver_number);
+      const details = driverDetails(drivers, styles, stint.driver_number);
       const compound = toTireCompound(stint.compound);
       return [{
         key: `degradation-${stint.driver_number}-${stint.stint_number}`,
         driverNumber: stint.driver_number,
         name: `${details.name} S${stint.stint_number} ${capitalize(compound)}`,
         color: details.color,
+        lineStyle: details.lineStyle,
         stintNumber: stint.stint_number,
         compound,
         values,
@@ -636,7 +738,8 @@ export function buildPositionSeries(
   laps: Lap[],
   positions: Position[],
   drivers: OpenF1Driver[],
-  selectedDriverNumbers: number[]
+  selectedDriverNumbers: number[],
+  styles: Map<number, DriverVisualStyle> = buildDriverVisualStyleMap(drivers),
 ): StrategyLineSeries[] {
   return selectedDriverNumbers.flatMap((driverNumber) => {
     const driverLaps = laps
@@ -665,7 +768,7 @@ export function buildPositionSeries(
       if (latestPosition != null) values.push({ lap: lap.lap_number, value: latestPosition });
     }
 
-    const details = driverDetails(drivers, driverNumber);
+    const details = driverDetails(drivers, styles, driverNumber);
     return values.length > 0
       ? [{ key: `position-${driverNumber}`, driverNumber, ...details, values }]
       : [];
@@ -674,13 +777,22 @@ export function buildPositionSeries(
 
 // ─── Stats helpers ────────────────────────────────────────────────────────────
 
+export type BestLap = Lap & { lap_duration: number };
+
+/** Return the fastest valid lap from a set of laps. */
+export function getBestLap(laps: Lap[]): BestLap | null {
+  let best: BestLap | null = null;
+  for (const lap of laps) {
+    if (lap.lap_duration == null || lap.lap_duration <= 0) continue;
+    if (best === null || lap.lap_duration < best.lap_duration) best = lap as BestLap;
+  }
+  return best;
+}
+
 /** Best lap from a set of laps, formatted as "m:ss.SSS" */
 export function getBestLapFormatted(laps: Lap[]): string {
-  const valid = laps
-    .filter((l) => l.lap_duration !== null && l.lap_duration > 0)
-    .map((l) => l.lap_duration as number);
-  if (valid.length === 0) return "—";
-  return formatLapTime(Math.min(...valid));
+  const best = getBestLap(laps);
+  return best ? formatLapTime(best.lap_duration) : "—";
 }
 
 /** Best top speed across car data samples */

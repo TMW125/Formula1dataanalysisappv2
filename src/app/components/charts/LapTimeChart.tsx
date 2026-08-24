@@ -1,4 +1,5 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { DRIVER_DASH_PATTERN } from "../../types/ui";
 import type { ChartLineConfig } from "../../types/ui";
 
 interface LapTimeChartProps {
@@ -37,17 +38,13 @@ export function LapTimeChart({ data, lines, height = 300 }: LapTimeChartProps) {
             labelStyle={{ color: "#9ca3af" }}
             formatter={(value: number) => [`${value.toFixed(3)}s`, ""]}
           />
-          <Legend
-            wrapperStyle={{ paddingTop: "10px" }}
-            iconType="line"
-            formatter={(value) => <span style={{ color: "#f5f5f5" }}>{value}</span>}
-          />
           {lines.map((line) => (
             <Line
               key={line.key}
               type="monotone"
               dataKey={line.key}
               stroke={line.color}
+              strokeDasharray={line.lineStyle === "dashed" ? DRIVER_DASH_PATTERN : undefined}
               name={line.name}
               dot={false}
               strokeWidth={2}

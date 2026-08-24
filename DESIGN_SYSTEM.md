@@ -90,34 +90,30 @@ Location: `/src/app/components/StatsCard.tsx`
 **Purpose**: High-level race weekend overview
 
 **Components**:
-- Session selector (top bar)
+- Latest completed session context
+- Leaderboard sourced from the latest completed session
 - Track map with driver positions
 - Session information panel
 - Driver leaderboard table
 - Lap time comparison chart
 
-### 2. Driver Analysis (`/driver-analysis`)
-**Purpose**: Detailed telemetry and performance analysis
+### 2. Practice (`/practice`)
+**Purpose**: Driver selection for the latest completed practice session
 
 **Components**:
-- Driver selector dropdown
-- Lap selector
-- Driver info card
-- Sector times breakdown
-- Telemetry charts (Speed, Throttle, Brake, Gear, RPM)
-- Tire compound history
+- Race-style Drivers card
+- Availability cards for future or in-progress sessions
 
-### 3. Driver Comparison (`/driver-comparison`)
-**Purpose**: Side-by-side driver comparison
+### 3. Qualifying (`/qualifying`)
+**Purpose**: Fastest-lap comparison for Qualifying and Sprint Qualifying
 
 **Components**:
-- Dual driver selectors
-- Delta time graph
-- Speed comparison overlay
-- Throttle comparison
-- Corner-by-corner analysis
+- Race-style Drivers card
+- Sprint-session toggle where applicable
+- Full-width running delta chart and responsive telemetry chart grid
+- Synchronized hover tooltips for speed, throttle, brake, gear, and RPM
 
-### 4. Race Strategy (`/race-strategy`)
+### 4. Race (`/race`)
 **Purpose**: Race pace and tire strategy analysis
 
 **Components**:
@@ -127,15 +123,13 @@ Location: `/src/app/components/StatsCard.tsx`
 - Average pace by stint chart
 - Pit stop summary table
 
-### 5. Data Explorer (`/data-explorer`)
-**Purpose**: Raw data access and export
+### 5. Live Replay (`/live-replay`)
+**Purpose**: Replay completed Race or Sprint sessions
 
 **Components**:
-- API endpoint selector
-- Filter controls (driver, session, lap)
-- Table/JSON view toggle
-- CSV export functionality
-- API documentation panel
+- Track map and classification
+- Replay timeline and event feed
+- Independent Race/Sprint toggle where applicable
 
 ## Layout Structure
 
@@ -144,13 +138,13 @@ Location: `/src/app/layouts/MainLayout.tsx`
 
 **Sidebar Navigation** (left):
 - Logo and branding
+- Year and race-weekend selectors
 - Navigation links with active states
 - Version information
 
-**Top Bar**:
-- Session selector
-- Race weekend selector
-- Driver search
+There is no global session selector. Each page resolves its required session from
+the selected weekend and displays a schedule message when that session is not
+complete.
 
 **Main Content Area**:
 - Responsive page container
