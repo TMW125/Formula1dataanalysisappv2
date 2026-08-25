@@ -6,7 +6,7 @@
  * inside UI components.
  */
 
-import type { CarData, Interval, Lap, OpenF1Driver, Pit, Position, Session, SessionResult, Stint, Weather } from "../types/openf1";
+import type { Interval, Lap, OpenF1Driver, Pit, Position, Session, SessionResult, Stint, Weather } from "../types/openf1";
 import type { DriverLineStyle, LeaderboardRow, SessionInfoData, TireCompound } from "../types/ui";
 import { TIRE_COLORS } from "../types/ui";
 
@@ -86,44 +86,6 @@ export function toTireCompound(value: string | null | undefined): TireCompound {
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
 
 /**
- * Build a leaderboard sorted by best lap time.
- * Works for both qualifying (true fastest lap) and race (latest lap as proxy).
- */
-export function buildLeaderboard(
-  laps: Lap[],
-  drivers: OpenF1Driver[]
-): LeaderboardRow[] {
-  const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
-
-  // Find each driver's best lap duration
-  const bestMap = new Map<number, number>();
-  for (const lap of laps) {
-    if (lap.lap_duration === null || lap.lap_duration <= 0) continue;
-    const current = bestMap.get(lap.driver_number);
-    if (current === undefined || lap.lap_duration < current) {
-      bestMap.set(lap.driver_number, lap.lap_duration);
-    }
-  }
-
-  if (bestMap.size === 0) return [];
-
-  const sorted = [...bestMap.entries()].sort((a, b) => a[1] - b[1]);
-  const leaderTime = sorted[0][1];
-
-  return sorted.map(([driverNum, bestTime], idx) => {
-    const d = driverMap.get(driverNum);
-    return {
-      position: idx + 1,
-      driver: d?.full_name ?? `#${driverNum}`,
-      time: formatLapTime(bestTime),
-      gap: idx === 0 ? "-" : `+${(bestTime - leaderTime).toFixed(3)}`,
-      team: d?.team_name ?? "Unknown",
-      teamColor: toHexColor(d?.team_colour),
-    };
-  });
-}
-
-/**
  * Build a leaderboard from session_result endpoint data.
  */
 export function buildLeaderboardFromResults(
@@ -133,14 +95,24 @@ export function buildLeaderboardFromResults(
   if (results.length === 0) return [];
   const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
 
-  return results.map((r) => {
+  return [...results]
+    .sort((a, b) => {
+      if (a.position !== null && b.position !== null) return a.position - b.position;
+      if (a.position !== null) return -1;
+      if (b.position !== null) return 1;
+      return b.number_of_laps - a.number_of_laps || a.driver_number - b.driver_number;
+    })
+    .map((r) => {
     const d = driverMap.get(r.driver_number);
+    const classificationStatus = r.dsq ? "DSQ" : r.dns ? "DNS" : r.dnf ? "DNF" : r.position === null ? "NC" : null;
     const rawGap = Array.isArray(r.gap_to_leader)
       ? [...r.gap_to_leader].reverse().find((value) => value !== null) ?? null
       : r.gap_to_leader;
     let gap: string;
-    if (rawGap === null || r.position === 1) {
+    if (r.position === 1) {
       gap = "-";
+    } else if (rawGap === null) {
+      gap = classificationStatus ?? "—";
     } else {
       const gapNum = Number(rawGap);
       if (gapNum === 0) gap = "-";
@@ -148,7 +120,9 @@ export function buildLeaderboardFromResults(
       else gap = `+${gapNum.toFixed(3)}`;
     }
     return {
+      driverNumber: r.driver_number,
       position: r.position,
+      classificationStatus,
       driver: d?.full_name ?? `#${r.driver_number}`,
       time: String(r.number_of_laps),
       gap,
@@ -202,83 +176,6 @@ export function buildSessionInfo(
       : "—",
     remainingTime,
   };
-}
-
-// ─── Lap time chart ───────────────────────────────────────────────────────────
-
-/**
- * Build data for LapTimeChart from laps for a set of drivers.
- *
- * Returns an array of `{ lap: number; [acronym]: number }` objects where each
- * key is the lower-cased driver acronym and the value is the lap duration in
- * seconds.
- */
-export function buildLapTimeChartData(
-  laps: Lap[],
-  drivers: OpenF1Driver[],
-  driverNumbers: number[]
-): { lap: number; [key: string]: number }[] {
-  const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
-
-  const lapMap = new Map<number, { lap: number; [key: string]: number }>();
-
-  for (const lap of laps) {
-    if (!driverNumbers.includes(lap.driver_number)) continue;
-    if (lap.lap_duration === null || lap.lap_duration <= 0) continue;
-    const driver = driverMap.get(lap.driver_number);
-    if (!driver) continue;
-
-    const key = driver.name_acronym.toLowerCase();
-    if (!lapMap.has(lap.lap_number)) {
-      lapMap.set(lap.lap_number, { lap: lap.lap_number });
-    }
-    lapMap.get(lap.lap_number)![key] = lap.lap_duration;
-  }
-
-  return [...lapMap.values()].sort((a, b) => a.lap - b.lap);
-}
-
-// ─── Car telemetry ────────────────────────────────────────────────────────────
-
-/**
- * Convert CarData[] to the telemetry chart data format.
- * The `time` field is elapsed seconds from the first included sample.
- * The `distance` field is kept as a sequential index for existing consumers.
- *
- * When `lap` is supplied (and has a valid `date_start` + `lap_duration`), only
- * samples that fall within that lap's time window are included.
- */
-export function buildCarTelemetry(
-  carData: CarData[],
-  lap?: Lap | null
-): Array<{
-  time: number;
-  distance: number;
-  speed: number;
-  throttle: number;
-  brake: number;
-  gear: number;
-  rpm: number;
-}> {
-  let filtered = carData;
-  if (lap && lap.date_start && lap.lap_duration !== null) {
-    const lapStart = new Date(lap.date_start).getTime();
-    const lapEnd = lapStart + lap.lap_duration * 1000;
-    filtered = carData.filter((pt) => {
-      const t = new Date(pt.date).getTime();
-      return t >= lapStart && t < lapEnd;
-    });
-  }
-  const firstTimestamp = filtered.length > 0 ? new Date(filtered[0].date).getTime() : 0;
-  return filtered.map((pt, idx) => ({
-    time: (new Date(pt.date).getTime() - firstTimestamp) / 1000,
-    distance: idx * 10,
-    speed: pt.speed,
-    throttle: pt.throttle,
-    brake: pt.brake > 0 ? 100 : 0,
-    gear: pt.n_gear,
-    rpm: pt.rpm,
-  }));
 }
 
 // ─── Stint timeline ───────────────────────────────────────────────────────────
@@ -403,59 +300,6 @@ export function buildPitStops(
     .sort((a, b) => a.lap - b.lap);
 }
 
-// ─── Average pace by stint ────────────────────────────────────────────────────
-
-export interface PaceDataPoint {
-  driver: string;
-  stint: string;
-  avgPace: number;
-  color: string;
-  compound: TireCompound;
-}
-
-export function buildPaceData(
-  laps: Lap[],
-  stints: Stint[],
-  drivers: OpenF1Driver[]
-): PaceDataPoint[] {
-  const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
-  const lapMap = new Map<string, number[]>(); // "driverNum-stintNum" → durations
-
-  for (const lap of laps) {
-    if (lap.lap_duration === null || lap.is_pit_out_lap) continue;
-    const stint = stints.find(
-      (s) =>
-        s.driver_number === lap.driver_number &&
-        lap.lap_number >= s.lap_start &&
-        lap.lap_number <= (s.lap_end ?? Infinity)
-    );
-    if (!stint) continue;
-    const key = `${lap.driver_number}-${stint.stint_number}`;
-    const list = lapMap.get(key) ?? [];
-    list.push(lap.lap_duration);
-    lapMap.set(key, list);
-  }
-
-  const result: PaceDataPoint[] = [];
-  for (const stint of stints) {
-    const key = `${stint.driver_number}-${stint.stint_number}`;
-    const durations = lapMap.get(key);
-    if (!durations || durations.length === 0) continue;
-    const avg = durations.reduce((a, b) => a + b, 0) / durations.length;
-    const d = driverMap.get(stint.driver_number);
-    const compound = toTireCompound(stint.compound);
-    result.push({
-      driver: d?.name_acronym ?? `#${stint.driver_number}`,
-      stint: `${d?.name_acronym ?? stint.driver_number} ${capitalize(stint.compound)} (${stint.lap_start}-${stint.lap_end ?? "?"})`,
-      avgPace: parseFloat(avg.toFixed(3)),
-      color: toHexColor(d?.team_colour),
-      compound,
-    });
-  }
-
-  return result.sort((a, b) => a.avgPace - b.avgPace);
-}
-
 // ─── Race strategy comparison ───────────────────────────────────────────────
 
 export function buildDefaultDriverSelection(
@@ -466,8 +310,8 @@ export function buildDefaultDriverSelection(
 ): number[] {
   const available = new Set(drivers.map((driver) => driver.driver_number));
   const classified = [...results]
-    .filter((result) => available.has(result.driver_number) && !result.dnf && !result.dns && !result.dsq)
-    .sort((a, b) => a.position - b.position)
+    .filter((result) => available.has(result.driver_number) && result.position !== null && !result.dnf && !result.dns && !result.dsq)
+    .sort((a, b) => a.position! - b.position!)
     .map((result) => result.driver_number);
 
   if (classified.length > 0) return classified.slice(0, limit);
@@ -663,75 +507,12 @@ export function buildRunningGapSeries(
   });
 }
 
-export interface DegradationSeries extends StrategyLineSeries {
-  stintNumber: number;
-  compound: TireCompound;
-}
-
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0
     ? (sorted[middle - 1] + sorted[middle]) / 2
     : sorted[middle];
-}
-
-export function buildDegradationSeries(
-  laps: Lap[],
-  stints: Stint[],
-  drivers: OpenF1Driver[],
-  selectedDriverNumbers: number[],
-  styles: Map<number, DriverVisualStyle> = buildDriverVisualStyleMap(drivers),
-): DegradationSeries[] {
-  const selected = new Set(selectedDriverNumbers);
-
-  return stints
-    .filter((stint) => selected.has(stint.driver_number))
-    .sort((a, b) => a.driver_number - b.driver_number || a.stint_number - b.stint_number)
-    .flatMap((stint) => {
-      const stintLaps = laps
-        .filter(
-          (lap) =>
-            lap.driver_number === stint.driver_number &&
-            lap.lap_number >= stint.lap_start &&
-            lap.lap_number <= (stint.lap_end ?? Infinity) &&
-            lap.lap_duration != null &&
-            lap.lap_duration > 0 &&
-            !lap.is_pit_out_lap
-        )
-        .sort((a, b) => a.lap_number - b.lap_number) as Array<Lap & { lap_duration: number }>;
-
-      if (stintLaps.length < 2) return [];
-      const durations = stintLaps.map((lap) => lap.lap_duration);
-      const center = median(durations);
-      const absoluteDeviations = durations.map((duration) => Math.abs(duration - center));
-      const threshold = Math.max(3, median(absoluteDeviations) * 3);
-      const cleanLaps = stintLaps.filter((lap) => Math.abs(lap.lap_duration - center) <= threshold);
-      if (cleanLaps.length < 2) return [];
-
-      const baseline = median(cleanLaps.slice(0, 3).map((lap) => lap.lap_duration));
-      const rawValues = cleanLaps.map((lap) => ({
-        lap: stint.tyre_age_at_start + (lap.lap_number - stint.lap_start),
-        value: lap.lap_duration - baseline,
-      }));
-      const values = rawValues.map((point, index) => ({
-        lap: point.lap,
-        value: Number(median(rawValues.slice(Math.max(0, index - 2), index + 1).map((item) => item.value)).toFixed(3)),
-      }));
-
-      const details = driverDetails(drivers, styles, stint.driver_number);
-      const compound = toTireCompound(stint.compound);
-      return [{
-        key: `degradation-${stint.driver_number}-${stint.stint_number}`,
-        driverNumber: stint.driver_number,
-        name: `${details.name} S${stint.stint_number} ${capitalize(compound)}`,
-        color: details.color,
-        lineStyle: details.lineStyle,
-        stintNumber: stint.stint_number,
-        compound,
-        values,
-      }];
-    });
 }
 
 export function buildPositionSeries(
@@ -793,10 +574,4 @@ export function getBestLap(laps: Lap[]): BestLap | null {
 export function getBestLapFormatted(laps: Lap[]): string {
   const best = getBestLap(laps);
   return best ? formatLapTime(best.lap_duration) : "—";
-}
-
-/** Best top speed across car data samples */
-export function getTopSpeed(carData: CarData[]): string {
-  if (carData.length === 0) return "—";
-  return `${Math.max(...carData.map((d) => d.speed))} km/h`;
 }

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Interval, Lap, OpenF1Driver, Pit, Position, SessionResult, Stint } from "../types/openf1";
+import type { Interval, Lap, OpenF1Driver, Pit, Position, SessionResult } from "../types/openf1";
 import {
   buildDriverVisualStyleMap,
   buildDefaultDriverSelection,
-  buildDegradationSeries,
   buildLapTimeSeries,
+  buildLeaderboardFromResults,
   buildPositionSeries,
   buildRunningGapSeries,
   formatLapTime,
@@ -54,7 +54,7 @@ const interval = (
   meeting_key: 20,
 });
 
-const result = (driver_number: number, position: number, dnf = false): SessionResult => ({
+const result = (driver_number: number, position: number | null, dnf = false): SessionResult => ({
   driver_number,
   position,
   dnf,
@@ -68,6 +68,24 @@ const result = (driver_number: number, position: number, dnf = false): SessionRe
 });
 
 describe("race strategy transformers", () => {
+  it("keeps nullable classifications stable and preserves result statuses", () => {
+    const drivers = Array.from({ length: 22 }, (_, index) => driver(index + 1, `D${index + 1}`));
+    const results = drivers.map((entry, index) => ({
+      ...result(entry.driver_number, index < 17 ? index + 1 : null),
+      number_of_laps: 60 - index,
+      dnf: index === 17,
+      dns: index === 18,
+      dsq: index === 19,
+    }));
+
+    const leaderboard = buildLeaderboardFromResults(results, drivers);
+
+    expect(leaderboard).toHaveLength(22);
+    expect(new Set(leaderboard.map((row) => row.driverNumber)).size).toBe(22);
+    expect(leaderboard.slice(0, 17).map((row) => row.position)).toEqual(Array.from({ length: 17 }, (_, index) => index + 1));
+    expect(leaderboard.slice(17).map((row) => row.classificationStatus)).toEqual(["DNF", "DNS", "DSQ", "NC", "NC"]);
+  });
+
   it("returns the fastest lap and keeps its driver number", () => {
     const laps = [lap(2, 1, 91.2), lap(1, 1, 90.5), lap(2, 2, 89.9), lap(1, 2, 0)];
     const best = getBestLap(laps);
@@ -184,18 +202,6 @@ describe("race strategy transformers", () => {
       { lap: 1, value: 90 },
       { lap: 2, value: 91.5 },
     ]);
-  });
-
-  it("calculates tyre age while filtering an obvious slow-lap outlier", () => {
-    const drivers = [driver(1, "ONE")];
-    const laps = [lap(1, 1, 90), lap(1, 2, 91), lap(1, 3, 120), lap(1, 4, 92)];
-    const stints: Stint[] = [{
-      driver_number: 1, stint_number: 1, lap_start: 1, lap_end: 4,
-      compound: "MEDIUM", tyre_age_at_start: 2, session_key: 10, meeting_key: 20,
-    }];
-    const built = buildDegradationSeries(laps, stints, drivers, [1]);
-    expect(built[0].values.map((point) => point.lap)).toEqual([2, 3, 5]);
-    expect(built[0].values.every((point) => Math.abs(point.value) < 5)).toBe(true);
   });
 
   it("maps the latest position sample to each completed lap", () => {

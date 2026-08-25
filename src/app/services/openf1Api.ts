@@ -11,18 +11,13 @@
 
 import type {
   CarData,
-  CarDataParams,
-  ChampionshipDriver,
-  ChampionshipDriversParams,
-  ChampionshipTeam,
-  ChampionshipTeamsParams,
+  CarDataRangeParams,
   DriversParams,
   Interval,
   IntervalsParams,
   Lap,
   LapsParams,
   Location,
-  LocationParams,
   LocationRangeParams,
   Meeting,
   MeetingsParams,
@@ -242,13 +237,6 @@ export async function getMeetingsBySeason(season: number | string): Promise<Meet
   return apiFetch<Meeting[]>("/meetings", { year: season } satisfies MeetingsParams);
 }
 
-/**
- * Fetch a single meeting by its unique key.
- */
-export async function getMeetingByKey(meetingKey: number): Promise<Meeting[]> {
-  return apiFetch<Meeting[]>("/meetings", { meeting_key: meetingKey } satisfies MeetingsParams);
-}
-
 // ─── Sessions ────────────────────────────────────────────────────────────────
 
 /**
@@ -259,20 +247,6 @@ export async function getMeetingByKey(meetingKey: number): Promise<Meeting[]> {
  */
 export async function getSessionsByMeeting(meetingKey: number): Promise<Session[]> {
   return apiFetch<Session[]>("/sessions", { meeting_key: meetingKey } satisfies SessionsParams);
-}
-
-/**
- * Fetch all sessions for an entire season.
- */
-export async function getSessionsBySeason(season: number | string): Promise<Session[]> {
-  return apiFetch<Session[]>("/sessions", { year: season } satisfies SessionsParams);
-}
-
-/**
- * Fetch a single session by its unique key.
- */
-export async function getSessionByKey(sessionKey: number): Promise<Session[]> {
-  return apiFetch<Session[]>("/sessions", { session_key: sessionKey } satisfies SessionsParams);
 }
 
 // ─── Drivers ─────────────────────────────────────────────────────────────────
@@ -305,22 +279,6 @@ export async function getLaps(sessionKey: number, driverNumber?: number, signal?
 }
 
 // ─── Car Data ─────────────────────────────────────────────────────────────────
-
-/**
- * Fetch sampled car telemetry (speed, RPM, throttle, brake, gear, DRS) for a
- * session, optionally filtered by driver.
- *
- * ⚠️  This endpoint can return very large payloads.  Consider filtering by
- * driver_number and adding date range parameters if performance is a concern.
- *
- * @example
- * const carData = await getCarData(9158, 1); // Verstappen only
- */
-export async function getCarData(sessionKey: number, driverNumber?: number, signal?: AbortSignal): Promise<CarData[]> {
-  const params: CarDataParams = { session_key: sessionKey };
-  if (driverNumber !== undefined) params.driver_number = driverNumber;
-  return apiFetch<CarData[]>("/car_data", params, signal);
-}
 
 // ─── Positions ────────────────────────────────────────────────────────────────
 
@@ -399,18 +357,6 @@ export async function getSessionResults(sessionKey: number, signal?: AbortSignal
   return apiFetch<SessionResult[]>("/session_result", params, signal);
 }// ─── Location ────────────────────────────────────────────────────────────────────
 
-/**
- * Fetch approximate car location data (~3.7 Hz) for a session.
- *
- * ⚠️  This endpoint returns very large payloads for full sessions.
- * Always filter by driver_number in the explorer.
- */
-export async function getLocation(sessionKey: number, driverNumber?: number, signal?: AbortSignal): Promise<Location[]> {
-  const params: LocationParams = { session_key: sessionKey };
-  if (driverNumber !== undefined) params.driver_number = driverNumber;
-  return apiFetch<Location[]>("/location", params, signal);
-}
-
 /** Fetch one bounded location window for all drivers in a session. */
 export async function getLocationRange(
   sessionKey: number,
@@ -463,26 +409,22 @@ export async function getStartingGrid(sessionKey: number, signal?: AbortSignal):
   return apiFetch<StartingGrid[]>("/starting_grid", params, signal, { notFoundValue: [] });
 }
 
-// ─── Championship Drivers (beta) ──────────────────────────────────────────────
 
-/**
- * Fetch driver championship standings for a (race) session.
- * Only available for race sessions.
- */
-export async function getChampionshipDrivers(sessionKey: number, signal?: AbortSignal): Promise<ChampionshipDriver[]> {
-  const params: ChampionshipDriversParams = { session_key: sessionKey };
-  return apiFetch<ChampionshipDriver[]>("/championship_drivers", params, signal);
-}
-
-// ─── Championship Teams (beta) ────────────────────────────────────────────────
-
-/**
- * Fetch team championship standings for a (race) session.
- * Only available for race sessions.
- */
-export async function getChampionshipTeams(sessionKey: number, signal?: AbortSignal): Promise<ChampionshipTeam[]> {
-  const params: ChampionshipTeamsParams = { session_key: sessionKey };
-  return apiFetch<ChampionshipTeam[]>("/championship_teams", params, signal);
+/** Fetch telemetry only around one known lap; qualifying must use this bounded form. */
+export async function getCarDataRange(
+  sessionKey: number,
+  driverNumber: number,
+  from: string,
+  to: string,
+  signal?: AbortSignal,
+): Promise<CarData[]> {
+  const params: CarDataRangeParams = {
+    session_key: sessionKey,
+    driver_number: driverNumber,
+    "date>=": from,
+    "date<": to,
+  };
+  return apiFetch<CarData[]>("/car_data", params, signal);
 }
 // ─── Convenience re-exports ──────────────────────────────────────────────────
 

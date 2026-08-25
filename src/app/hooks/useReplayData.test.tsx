@@ -99,4 +99,24 @@ describe("useReplayData", () => {
     await waitFor(() => expect(result.current.locationReady).toBe(true));
     expect(mocks.getLocationRange).toHaveBeenCalledTimes(2);
   });
+
+  it("loads a location window beyond the scheduled end when timing data runs late", async () => {
+    const lateTimestamp = Date.parse(session.date_end) + 10 * 60_000;
+    mocks.getPositions.mockResolvedValueOnce([{
+      session_key: session.session_key,
+      meeting_key: session.meeting_key,
+      driver_number: 1,
+      position: 1,
+      date: new Date(lateTimestamp).toISOString(),
+    }]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderHook(() => useReplayData(session, lateTimestamp), {
+      wrapper: makeWrapper(client),
+    });
+
+    await waitFor(() => expect(mocks.getLocationRange).toHaveBeenCalled());
+    const [, from, to] = mocks.getLocationRange.mock.calls.at(-1)!;
+    expect(Date.parse(from)).toBeGreaterThanOrEqual(Date.parse(session.date_end));
+    expect(Date.parse(to)).toBeGreaterThan(Date.parse(session.date_end));
+  });
 });

@@ -1,238 +1,33 @@
-# F1 Analytics - Design System Documentation
+# Interface and interaction conventions
 
-## Overview
-A professional Formula 1 data analysis platform featuring a dark motorsport theme inspired by F1 broadcast graphics, with emphasis on data visualization and telemetry analysis.
+## Presentation
 
-## Color Palette
+The interface uses a dark, high-contrast motorsport palette. Rajdhani is used for headings and controls; Inter is used for body copy. Driver series use OpenF1 team colors plus line style so teammates remain distinguishable without relying on color alone.
 
-### Primary Colors
-- **F1 Red**: `#E10600` - Primary brand color, used for CTAs and important highlights
-- **Background**: `#0a0a0f` - Deep dark background with subtle carbon fiber texture
-- **Card Background**: `#15151c` - Elevated surface for content cards
-- **Secondary**: `#1a1a24` - Input fields and secondary surfaces
+The supported layout begins at 1024px. At narrower widths the application shows one clear support message instead of compressing the fixed navigation and charts into an unusable layout.
 
-### Team Colors (from mockData.ts)
-- **Red Bull Racing**: `#3671C6`
-- **Mercedes**: `#27F4D2`
-- **Ferrari**: `#E8002D`
-- **McLaren**: `#FF8000`
-- **Aston Martin**: `#229971`
+## Shared states
 
-### Chart Colors
-- Chart 1: `#E10600` (F1 Red)
-- Chart 2: `#0090ff` (Cyan Blue)
-- Chart 3: `#00D2BE` (Teal)
-- Chart 4: `#ff8800` (Orange)
-- Chart 5: `#ff0050` (Pink)
+`src/app/components/AsyncState.tsx` defines the shared meanings for page loading, panel loading, blocking error, empty content, and partial-data warning. A page must not render a required-source failure as an empty result. Optional-source failures must leave unaffected content interactive.
 
-## Typography
+Loading and error announcements are concise and owned by their surrounding state. The spinner itself is decorative. Retry buttons remain available for blocking failures and for recoverable optional failures.
 
-### Fonts
-- **Headings**: Rajdhani (Google Fonts) - Bold, condensed motorsport aesthetic
-- **Body**: Inter (Google Fonts) - Clean, readable sans-serif
+## Driver selection
 
-### Font Weights
-- Normal: 400
-- Medium: 500-600
-- Bold: 700
+Driver selection has no maximum and retains Select all. Each driver is represented by one button with `aria-pressed`; the check mark is presentational rather than a nested control. Zero, one, several, and the full field are intentional states.
 
-## Components
+## Charts
 
-### Reusable Chart Components
+- Charts that share the same semantic x-axis share hover position: qualifying charts synchronize by lap progress, while race line charts synchronize by lap number.
+- Legends and tooltips reuse shared driver-series meaning, including teammate dash patterns.
+- Chart animation is disabled so selection and hover do not replay motion. Global reduced-motion styles also suppress incidental interface animation.
+- The 22-driver violin plot uses a minimum width per driver and horizontal scrolling rather than collapsing labels and marks.
+- Position domains are derived from actual data and field size rather than assuming 20 drivers.
 
-#### TelemetryChart
-Location: `/src/app/components/charts/TelemetryChart.tsx`
-- Multi-line chart for telemetry data visualization
-- Configurable data keys, colors, and labels
-- Used for speed, throttle, brake, gear, and RPM data
+Version 1 provides best-effort structural accessibility. Complete keyboard exploration and equivalent non-visual data tables for every chart are explicit post-release work.
 
-#### LapTimeChart
-Location: `/src/app/components/charts/LapTimeChart.tsx`
-- Line chart for lap time comparison
-- Shows multiple drivers over race distance
-- Supports stint visualization
+## Replay
 
-### UI Components
+Replay controls precede the visualizations in reading and document order. Timeline targets are at least 24×24px. Events too close to address independently are grouped by rendered pixel distance; the cluster opens a keyboard-accessible list where each event seeks to its exact timestamp. Only the newest event is announced, rather than marking the entire feed as live.
 
-#### DriverCard
-Location: `/src/app/components/DriverCard.tsx`
-- Displays driver information with team colors
-- Shows driver number, name, team, and abbreviation
-- Hover effects for interactivity
-
-#### LeaderboardTable
-Location: `/src/app/components/LeaderboardTable.tsx`
-- Sortable table showing driver positions
-- Highlights top 3 positions with medals
-- Shows lap times and gaps with monospace font
-
-#### SessionInfoPanel
-Location: `/src/app/components/SessionInfoPanel.tsx`
-- Displays current session information
-- Track name, weather, status, remaining time
-- Icon-based information cards
-
-#### TrackMap
-Location: `/src/app/components/TrackMap.tsx`
-- SVG-based track visualization
-- Real-time driver positions
-- Start/finish line indicator
-
-#### StatsCard
-Location: `/src/app/components/StatsCard.tsx`
-- Reusable stats display component
-- Icon support with custom colors
-- Optional trend indicators
-
-## Pages
-
-### 1. Dashboard (`/`)
-**Purpose**: High-level race weekend overview
-
-**Components**:
-- Latest completed session context
-- Leaderboard sourced from the latest completed session
-- Track map with driver positions
-- Session information panel
-- Driver leaderboard table
-- Lap time comparison chart
-
-### 2. Practice (`/practice`)
-**Purpose**: Driver selection for the latest completed practice session
-
-**Components**:
-- Race-style Drivers card
-- Availability cards for future or in-progress sessions
-
-### 3. Qualifying (`/qualifying`)
-**Purpose**: Fastest-lap comparison for Qualifying and Sprint Qualifying
-
-**Components**:
-- Race-style Drivers card
-- Sprint-session toggle where applicable
-- Full-width running delta chart and responsive telemetry chart grid
-- Synchronized hover tooltips for speed, throttle, brake, gear, and RPM
-
-### 4. Race (`/race`)
-**Purpose**: Race pace and tire strategy analysis
-
-**Components**:
-- Key metrics cards
-- Stint timeline visualization
-- Lap times scatter plot
-- Average pace by stint chart
-- Pit stop summary table
-
-### 5. Live Replay (`/live-replay`)
-**Purpose**: Replay completed Race or Sprint sessions
-
-**Components**:
-- Track map and classification
-- Replay timeline and event feed
-- Independent Race/Sprint toggle where applicable
-
-## Layout Structure
-
-### MainLayout
-Location: `/src/app/layouts/MainLayout.tsx`
-
-**Sidebar Navigation** (left):
-- Logo and branding
-- Year and race-weekend selectors
-- Navigation links with active states
-- Version information
-
-There is no global session selector. Each page resolves its required session from
-the selected weekend and displays a schedule message when that session is not
-complete.
-
-**Main Content Area**:
-- Responsive page container
-- Scroll support for large datasets
-
-## Design Patterns
-
-### Interactive Elements
-- Hover states on all clickable elements
-- Focus rings with F1 red color
-- Smooth transitions (200-300ms)
-- Active state indicators
-
-### Data Visualization
-- Dark backgrounds for charts
-- Team colors for driver identification
-- Monospace fonts for timing data
-- Clear axis labels and legends
-
-### Spacing
-- Page padding: 24px (1.5rem)
-- Card padding: 24px
-- Grid gaps: 24px
-- Component spacing: 16-24px
-
-### Border Radius
-- Cards: 6px (0.375rem)
-- Buttons: 8px (0.5rem)
-- Small elements: 4px
-
-## Responsive Behavior
-
-### Breakpoints
-- Mobile: < 768px
-- Tablet: 768px - 1024px
-- Desktop: > 1024px
-
-### Grid Layouts
-- 1 column on mobile
-- 2-3 columns on tablet
-- 3-4 columns on desktop
-
-## Data Integration
-
-### Mock Data Structure
-Location: `/src/app/data/mockData.ts`
-
-**Data Types**:
-- Driver information
-- Lap times and leaderboard
-- Session information
-- Telemetry points
-- Sector times
-- Tire stints
-
-**OpenF1 API Endpoints** (for production):
-- `/sessions` - Session data
-- `/drivers` - Driver information
-- `/laps` - Lap time data
-- `/telemetry` - Car telemetry
-- `/car_data` - Car sensor data
-- `/positions` - Track position data
-
-## Accessibility
-
-- Semantic HTML elements
-- ARIA labels on interactive elements
-- Keyboard navigation support
-- High contrast ratios (WCAG AA compliant)
-- Focus visible states
-
-## Performance Considerations
-
-- Lazy loading for large datasets
-- Optimized SVG rendering
-- Memoized chart components
-- Efficient data filtering
-- Virtualized tables (recommended for production)
-
-## Future Enhancements
-
-1. Real-time data updates via WebSocket
-2. User preferences and saved views
-3. Advanced filtering and sorting
-4. Team comparison mode
-5. Historical data analysis
-6. Mobile-optimized layouts
-7. Dark/light theme toggle (currently dark-only)
-8. Custom dashboard widgets
-9. Data annotations and notes
-10. Export to PDF/PNG functionality
+Unknown data is shown as unavailable, never inferred as a leader or zero value. Pre-session events may establish the initial race-control state but do not appear as false `00:00` feed entries.

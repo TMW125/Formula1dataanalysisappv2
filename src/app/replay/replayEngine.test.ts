@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceReplayTime, buildReplayFrame, createReplayIndex, formatReplayGap, getReplayEnd, isTimelineMarkerEvent } from "./replayEngine";
+import { advanceReplayTime, buildReplayEvents, buildReplayFrame, clusterReplayEvents, createReplayIndex, formatReplayGap, getReplayEnd, isTimelineMarkerEvent } from "./replayEngine";
 import type { ReplayDataset, ReplayEvent } from "./types";
 
 const START = Date.parse("2024-01-01T12:00:00Z");
@@ -50,6 +50,16 @@ describe("replay frames", () => {
     expect(frame.drivers[0].location).toEqual({ x: 10, y: 5 });
   });
 
+  it("shows one known leader and lap-one tyres before a lap is completed", () => {
+    const frame = buildReplayFrame(createReplayIndex(dataset()), START);
+    const leaderLabels = frame.drivers.filter((driver) => driver.gap === "LEADER");
+
+    expect(leaderLabels).toHaveLength(1);
+    expect(leaderLabels[0].driver.driver_number).toBe(1);
+    expect(frame.drivers.find((driver) => driver.driver.driver_number === 2)?.gap).toBe("—");
+    expect(frame.drivers.find((driver) => driver.driver.driver_number === 1)?.compound).toBe("SOFT");
+  });
+
   it("reconstructs pits, flags, events, lap gaps, and final results", () => {
     const index = createReplayIndex(dataset());
     const pitFrame = buildReplayFrame(index, START + 30_000);
@@ -66,6 +76,8 @@ describe("replay frames", () => {
   it("hides stale locations and formats all gap variants", () => {
     expect(buildReplayFrame(createReplayIndex(dataset()), START + 10_000).drivers[0].location).toBeNull();
     expect(formatReplayGap(null, true)).toBe("LEADER");
+    expect(formatReplayGap(null)).toBe("—");
+    expect(formatReplayGap(0)).toBe("+0.000");
     expect(formatReplayGap(1.234)).toBe("+1.234");
     expect(formatReplayGap("+2 LAPS")).toBe("+2 LAPS");
   });
@@ -185,5 +197,41 @@ describe("timeline markers", () => {
     expect(isTimelineMarkerEvent(event({ kind: "overtake" }))).toBe(false);
     expect(isTimelineMarkerEvent(event({ kind: "pit" }))).toBe(false);
     expect(isTimelineMarkerEvent(event({ kind: "radio" }))).toBe(false);
+  });
+
+  it("excludes pre-session feed events while retaining their initial flag state", () => {
+    const replay = dataset();
+    replay.raceControl.unshift({
+      session_key: 1,
+      meeting_key: 1,
+      date: new Date(START - 30_000).toISOString(),
+      driver_number: null,
+      lap_number: null,
+      category: "Flag",
+      flag: "RED",
+      scope: "Track",
+      sector: null,
+      message: "SESSION START DELAYED",
+    });
+
+    expect(buildReplayEvents(replay).every((item) => item.timestamp >= START)).toBe(true);
+    const initialFrame = buildReplayFrame(createReplayIndex(replay), START);
+    expect(initialFrame.flag).toBe("RED");
+    expect(initialFrame.events).toEqual([]);
+  });
+
+  it("clusters marker hit targets while keeping exact events", () => {
+    const events = [
+      event({ id: "a", timestamp: START + 30_000 }),
+      event({ id: "b", timestamp: START + 30_000 }),
+      event({ id: "c", timestamp: START + 31_000 }),
+      event({ id: "d", timestamp: START + 50_000 }),
+    ];
+    const clusters = clusterReplayEvents(events, START, END, 600);
+
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0].events.map((item) => item.id)).toEqual(["a", "b", "c"]);
+    expect(clusters.flatMap((cluster) => cluster.events)).toHaveLength(events.length);
+    expect(clusters[1].pixel - clusters[0].pixel).toBeGreaterThanOrEqual(28);
   });
 });

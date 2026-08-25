@@ -22,11 +22,13 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {data.map((entry) => (
-              <tr key={entry.position} className="hover:bg-secondary/50 transition-colors">
+            {data.map((entry) => {
+              const hasPosition = entry.position !== null;
+              return (
+              <tr key={entry.driverNumber} className="hover:bg-secondary/50 transition-colors">
                 <td className="px-4 py-3">
                   <div
-                    className={`w-8 h-8 rounded flex items-center justify-center font-bold ${
+                    className={`${hasPosition ? "h-8 w-8" : "h-8 min-w-11 px-2"} inline-flex rounded items-center justify-center font-bold ${hasPosition ? "text-sm" : "text-xs tracking-wide"} ${
                       entry.position === 1
                         ? "bg-yellow-500/20 text-yellow-500"
                         : entry.position === 2
@@ -36,7 +38,7 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
                         : "bg-muted text-muted-foreground"
                     }`}
                   >
-                    {entry.position}
+                    {entry.position ?? entry.classificationStatus ?? "—"}
                   </div>
                 </td>
                 <td className="px-4 py-3">
@@ -60,7 +62,8 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
                   </span>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

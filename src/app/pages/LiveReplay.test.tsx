@@ -141,4 +141,41 @@ describe("ReplayControls", () => {
     });
     expect(screen.getByRole("tooltip")).toHaveTextContent("Lap 12");
   });
+
+  it("keeps events at the same timestamp independently seekable in a cluster", () => {
+    const onSeek = vi.fn();
+    const start = Date.parse("2024-01-01T12:00:00Z");
+    const events = ["Red flag", "Session stopped"].map((title, index) => ({
+      id: `event-${index}`,
+      date: new Date(start + 30_000).toISOString(),
+      timestamp: start + 30_000,
+      kind: "control" as const,
+      title,
+      detail: `${title} detail`,
+      driverNumber: null,
+      lapNumber: 12,
+      flag: "RED",
+    }));
+
+    render(
+      <ReplayControls
+        start={start}
+        end={start + 60_000}
+        current={start}
+        playing={false}
+        buffering={false}
+        speed={1}
+        events={events}
+        disabled={false}
+        onToggle={vi.fn()}
+        onRestart={vi.fn()}
+        onSeek={onSeek}
+        onSpeed={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "2 replay events at 00:30" }));
+    fireEvent.click(screen.getByRole("button", { name: /Session stopped/ }));
+    expect(onSeek).toHaveBeenCalledWith(start + 30_000);
+  });
 });

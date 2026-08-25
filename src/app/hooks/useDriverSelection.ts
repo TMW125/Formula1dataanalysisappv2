@@ -54,7 +54,7 @@ export function useDriverSelection({
     [sessionDrivers, sessionLaps, sessionResults],
   );
   const resultPosition = useMemo(
-    () => new Map(sessionResults.map((result) => [result.driver_number, result.position])),
+    () => new Map(sessionResults.flatMap((result) => result.position === null ? [] : [[result.driver_number, result.position] as const])),
     [sessionResults],
   );
   const orderedDrivers = useMemo(

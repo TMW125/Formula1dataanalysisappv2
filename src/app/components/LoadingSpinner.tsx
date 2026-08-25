@@ -7,7 +7,7 @@ export function LoadingSpinner({ compact = false }: LoadingSpinnerProps) {
     <div
       aria-hidden="true"
       data-slot="loading-spinner"
-      className={compact ? "inline-flex shrink-0 items-center justify-center" : "flex min-h-screen items-center justify-center"}
+      className="inline-flex shrink-0 items-center justify-center"
     >
       <div className={`relative shrink-0 ${compact ? "h-6 w-6" : "h-16 w-16"}`}>
         <div className={`absolute inset-0 rounded-full border-border ${compact ? "border-2" : "border-4"}`} />

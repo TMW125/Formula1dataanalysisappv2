@@ -5,6 +5,7 @@ import { formatLapTime, type StrategyLineSeries } from "../../utils/transformers
 const CHART_HEIGHT = 340;
 const MARGIN = { top: 16, right: 20, bottom: 48, left: 76 };
 const DENSITY_STEPS = 48;
+const MINIMUM_DRIVER_SLOT_WIDTH = 88;
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -74,14 +75,17 @@ export function LapTimeViolinChart({ series }: { series: StrategyLineSeries[] })
   }, [series]);
 
   const innerHeight = CHART_HEIGHT - MARGIN.top - MARGIN.bottom;
+  const chartWidth = plot
+    ? Math.max(width, MARGIN.left + MARGIN.right + plot.violins.length * MINIMUM_DRIVER_SLOT_WIDTH)
+    : width;
   const yFor = (value: number) => plot
     ? MARGIN.top + ((plot.domainMaximum - value) / (plot.domainMaximum - plot.domainMinimum)) * innerHeight
     : MARGIN.top;
 
-  return <div ref={containerRef} className="w-full min-w-0">
+  return <div ref={containerRef} className="w-full min-w-0 overflow-x-auto" tabIndex={plot && chartWidth > width ? 0 : undefined} aria-label={plot && chartWidth > width ? "Scrollable lap-time distribution chart" : undefined}>
     {!plot ? <div className="h-[280px] flex items-center justify-center border border-dashed border-border rounded-md text-sm text-muted-foreground text-center px-6">Lap-time distribution data is unavailable for the selected drivers.</div> : width > 0 ? <div>
       <svg
-        width={width}
+        width={chartWidth}
         height={CHART_HEIGHT}
         role="img"
         aria-label="Violin plot comparing the distribution of cleaned lap times for each selected driver"
@@ -91,14 +95,14 @@ export function LapTimeViolinChart({ series }: { series: StrategyLineSeries[] })
       {plot.ticks.map((tick) => {
         const y = yFor(tick);
         return <g key={tick}>
-          <line x1={MARGIN.left} x2={width - MARGIN.right} y1={y} y2={y} stroke="#2a2a36" strokeDasharray="3 3" />
+          <line x1={MARGIN.left} x2={chartWidth - MARGIN.right} y1={y} y2={y} stroke="#2a2a36" strokeDasharray="3 3" />
           <text x={MARGIN.left - 10} y={y + 4} textAnchor="end" fill="#9ca3af" fontSize={11}>{formatLapTime(tick)}</text>
         </g>;
       })}
       <line x1={MARGIN.left} x2={MARGIN.left} y1={MARGIN.top} y2={CHART_HEIGHT - MARGIN.bottom} stroke="#9ca3af" />
       <text x={16} y={MARGIN.top + innerHeight / 2} transform={`rotate(-90 16 ${MARGIN.top + innerHeight / 2})`} textAnchor="middle" fill="#9ca3af" fontSize={11}>Lap time</text>
       {plot.violins.map((violin, index) => {
-        const plotWidth = width - MARGIN.left - MARGIN.right;
+        const plotWidth = chartWidth - MARGIN.left - MARGIN.right;
         const slotWidth = plotWidth / plot.violins.length;
         const centerX = MARGIN.left + slotWidth * (index + 0.5);
         const halfWidth = Math.min(54, slotWidth * 0.38);

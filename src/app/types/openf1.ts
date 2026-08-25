@@ -170,7 +170,7 @@ export interface SessionResult {
   session_key: number;
   meeting_key: number;
   driver_number: number;
-  position: number;
+  position: number | null;
   duration: number | Array<number | null> | null;
   gap_to_leader: number | string | Array<number | string | null> | null;
   number_of_laps: number;
@@ -222,30 +222,6 @@ export interface StartingGrid {
   lap_duration: number | null;
 }
 
-// ─── Championship Drivers (beta) ──────────────────────────────────────────────
-
-export interface ChampionshipDriver {
-  session_key: number;
-  meeting_key: number;
-  driver_number: number;
-  points_current: number;
-  points_start: number;
-  position_current: number;
-  position_start: number;
-}
-
-// ─── Championship Teams (beta) ────────────────────────────────────────────────
-
-export interface ChampionshipTeam {
-  session_key: number;
-  meeting_key: number;
-  team_name: string;
-  points_current: number;
-  points_start: number;
-  position_current: number;
-  position_start: number;
-}
-
 // ─── Race Control ────────────────────────────────────────────────────────────
 
 export interface RaceControlEvent {
@@ -265,14 +241,10 @@ export interface RaceControlEvent {
 
 export interface MeetingsParams {
   year?: number | string;
-  meeting_key?: number;
 }
 
 export interface SessionsParams {
   meeting_key?: number;
-  session_key?: number;
-  year?: number | string;
-  session_name?: string;
 }
 
 export interface DriversParams {
@@ -286,9 +258,11 @@ export interface LapsParams {
   lap_number?: number;
 }
 
-export interface CarDataParams {
+export interface CarDataRangeParams {
   session_key: number;
-  driver_number?: number;
+  driver_number: number;
+  "date>=": string;
+  "date<": string;
 }
 
 export interface PositionsParams {
@@ -323,12 +297,8 @@ export interface SessionResultParams {
   session_key: number;
 }
 
-export interface LocationParams {
+export interface LocationRangeParams {
   session_key: number;
-  driver_number?: number;
-}
-
-export interface LocationRangeParams extends LocationParams {
   "date>=": string;
   "date<": string;
 }
@@ -346,14 +316,4 @@ export interface OvertakesParams {
 
 export interface StartingGridParams {
   session_key: number;
-}
-
-export interface ChampionshipDriversParams {
-  session_key: number;
-  driver_number?: number;
-}
-
-export interface ChampionshipTeamsParams {
-  session_key: number;
-  team_name?: string;
 }

@@ -7,29 +7,24 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { useMeetings, useSelectedMeetingKey, useSelectedSeason, useSessions } from "../context/F1DataContext";
+import { useMeetings, useSelectedMeetingKey, useSelectedSeason } from "../context/F1DataContext";
 import {
-  getCarData,
   getDrivers,
   getIntervals,
   getLaps,
   getPits,
   getPositions,
-  getRaceControl,
   getSessionResults,
   getStints,
   getWeather,
 } from "../services/openf1Api";
 import type {
-  CarData,
   CircuitInfo,
   Interval,
   Lap,
   OpenF1Driver,
   Pit,
   Position,
-  RaceControlEvent,
-  Session,
   SessionResult,
   Stint,
   Weather,
@@ -79,11 +74,6 @@ function useSessionQuery<T>(
   };
 }
 
-export function useCurrentSession(sessionKey: number | null): Session | null {
-  const { sessions } = useSessions();
-  return sessions.find((session) => session.session_key === sessionKey) ?? null;
-}
-
 export function useDriversData(sessionKey: number | null, options: { enabled?: boolean } = {}): FetchState<OpenF1Driver> {
   return useSessionQuery("drivers", (key, signal) => getDrivers(key, undefined, signal), sessionKey, options.enabled ?? true);
 }
@@ -112,37 +102,11 @@ export function useIntervalsData(sessionKey: number | null): FetchState<Interval
   return useSessionQuery("intervals", (key, signal) => getIntervals(key, undefined, signal), sessionKey);
 }
 
-export function useRaceControlData(sessionKey: number | null): FetchState<RaceControlEvent> {
-  return useSessionQuery("race_control", (key, signal) => getRaceControl(key, signal), sessionKey);
-}
-
 export function useSessionResultsData(sessionKey: number | null): FetchState<SessionResult> {
   return useSessionQuery("session_result", (key, signal) => getSessionResults(key, signal), sessionKey);
 }
 
-export function useCarDataForDriver(sessionKey: number | null, driverNumber: number | null): FetchState<CarData> {
-  const season = useSelectedSeason();
-  const meetingKey = useSelectedMeetingKey();
-  const enabled = sessionKey !== null && meetingKey !== null && driverNumber !== null;
-  const query = useQuery<CarData[], Error>({
-    queryKey: enabled
-      ? openF1QueryKeys.session(season, meetingKey, sessionKey, "car_data", driverNumber)
-      : openF1QueryKey({ season, meetingKey, sessionKey, endpoint: "car_data", driverNumber }),
-    queryFn: ({ signal }) => getCarData(sessionKey!, driverNumber!, signal),
-    enabled,
-    staleTime: QUERY_STALE_TIME.historical,
-    gcTime: QUERY_GC_TIME.location,
-  });
-
-  return {
-    data: query.data ?? [],
-    loading: enabled && query.isPending,
-    error: enabled ? errorMessage(query.error) : null,
-    refetch: () => { void query.refetch(); },
-  };
-}
-
-export function useCircuitInfo(): { circuitInfo: CircuitInfo | null; loading: boolean } {
+export function useCircuitInfo(): { circuitInfo: CircuitInfo | null; loading: boolean; error: string | null; refetch: () => void } {
   const meetingKey = useSelectedMeetingKey();
   const { meetings } = useMeetings();
   const meeting = meetings.find((item) => item.meeting_key === meetingKey);
@@ -165,5 +129,10 @@ export function useCircuitInfo(): { circuitInfo: CircuitInfo | null; loading: bo
     gcTime: QUERY_GC_TIME.standard,
   });
 
-  return { circuitInfo: query.data ?? null, loading: Boolean(url) && query.isPending };
+  return {
+    circuitInfo: query.data ?? null,
+    loading: Boolean(url) && query.isPending,
+    error: url ? errorMessage(query.error) : null,
+    refetch: () => { void query.refetch(); },
+  };
 }

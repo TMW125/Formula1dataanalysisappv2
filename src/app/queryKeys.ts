@@ -23,9 +23,7 @@ export type OpenF1Endpoint =
   | "location"
   | "team_radio"
   | "overtakes"
-  | "starting_grid"
-  | "championship_drivers"
-  | "championship_teams";
+  | "starting_grid";
 
 interface OpenF1QueryDimensions {
   season?: string | number | null;

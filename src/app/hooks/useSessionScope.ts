@@ -12,11 +12,6 @@ export interface SessionResolution {
   supportsSprint: boolean;
 }
 
-export interface PracticeSessionStatus {
-  session: Session;
-  status: Exclude<SessionStatus, "loading" | "missing">;
-}
-
 export function getSessionStatus(session: Session, now = Date.now()): Exclude<SessionStatus, "loading" | "missing"> {
   const start = Date.parse(session.date_start);
   const end = Date.parse(session.date_end);
@@ -95,23 +90,6 @@ export function useResolvedSession(
 
     return resolveSession(sessions, scope, variant, now);
   }, [loading, meetingKey, now, scope, sessions, variant]);
-}
-
-export function usePracticeSessions(): { sessions: PracticeSessionStatus[]; loading: boolean } {
-  const { sessions, loading } = useSessions();
-  const now = useCurrentTime();
-
-  return {
-    sessions: useMemo(
-      () => sessions
-        .filter((session) => session.session_type === "Practice")
-        .map((session) => ({ session, status: getSessionStatus(session, now) }))
-        .filter((item): item is PracticeSessionStatus => item.status !== "invalid")
-        .sort((a, b) => Date.parse(a.session.date_start) - Date.parse(b.session.date_start)),
-      [now, sessions],
-    ),
-    loading,
-  };
 }
 
 export function useLatestCompletedSession(): { session: Session | null; loading: boolean } {

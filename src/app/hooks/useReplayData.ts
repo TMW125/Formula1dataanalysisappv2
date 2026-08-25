@@ -20,22 +20,7 @@ import {
   getTeamRadio,
   getWeather,
 } from "../services/openf1Api";
-import type {
-  Interval,
-  Lap,
-  Location,
-  OpenF1Driver,
-  Overtake,
-  Pit,
-  Position,
-  RaceControlEvent,
-  Session,
-  SessionResult,
-  StartingGrid,
-  Stint,
-  TeamRadio,
-  Weather,
-} from "../types/openf1";
+import type { Location, Session } from "../types/openf1";
 import { getReplayEnd } from "../replay/replayEngine";
 import type { ReplayDataset, ReplayLoadState, ReplayOptionalDataKey } from "../replay/types";
 import { QUERY_GC_TIME, QUERY_STALE_TIME } from "../queryClient";
@@ -279,11 +264,10 @@ export function useReplayData(session: Session | null, currentTime: number): Rep
   const replayEnd = session && baseline
     ? getReplayEnd({ session, ...baseline, ...optionalData, locations: [] })
     : sessionEnd;
-  // Keep location query boundaries stable even if optional timing sources
-  // later refine the useful replay end. This prevents a final chunk from
-  // being requested again under a different `to` timestamp.
-  const locationEnd = Number.isFinite(sessionEnd) && sessionEnd > start ? sessionEnd : replayEnd;
-  const duration = Math.max(0, replayEnd - start);
+  const locationEnd = Number.isFinite(replayEnd) && replayEnd > start
+    ? replayEnd
+    : Math.max(start, sessionEnd);
+  const duration = Math.max(0, locationEnd - start);
   const maxChunk = Math.max(0, Math.ceil(duration / LOCATION_WINDOW_MS) - 1);
   const currentChunk = Math.min(
     maxChunk,
@@ -353,12 +337,11 @@ export function useReplayData(session: Session | null, currentTime: number): Rep
   }, [
     baseline,
     currentChunk,
-    currentLocationQuery?.data,
+    currentLocationQuery,
     locationEnd,
     meetingKey,
-    nextLocationQuery?.data,
+    nextLocationQuery,
     queryClient,
-    replayEnd,
     season,
     session,
   ]);

@@ -93,7 +93,7 @@ export function DriverChartTooltip({
     const observer = new ResizeObserver(updatePlacement);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [chartMargin.left, chartMargin.right, xDomain, xValue, yAxisWidth]);
+  }, [chartMargin, xDomain, xValue, yAxisWidth]);
 
   if (!data) return null;
   const placement = getTooltipPlacement(xValue, xDomain, placeOnRight, chartMargin, yAxisWidth);
@@ -101,7 +101,7 @@ export function DriverChartTooltip({
   return (
     <div
       ref={tooltipRef}
-      className="pointer-events-none absolute top-3 z-10 min-w-36 rounded-md border border-border bg-popover/95 px-3 py-2 text-xs text-popover-foreground shadow-lg"
+      className="pointer-events-none absolute top-3 z-10 max-h-[min(70vh,28rem)] min-w-36 max-w-[calc(100%-1rem)] overflow-y-auto rounded-md border border-border bg-popover/95 px-3 py-2 text-xs text-popover-foreground shadow-lg"
       style={placement}
       aria-live="polite"
     >

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Lap } from "../types/openf1";
 import { getFastestValidLaps } from "../utils/qualifyingTelemetry";
-import { buildQualifyingTelemetryRequests } from "./useQualifyingTelemetryData";
+import { buildQualifyingTelemetryRequests, getQualifyingTelemetryBounds } from "./useQualifyingTelemetryData";
 
 function lap(driverNumber: number, duration: number | null): Lap {
   return {
@@ -27,11 +27,23 @@ describe("qualifying telemetry requests", () => {
     const fastestLaps = getFastestValidLaps(laps, [1, 2, 3, 4]);
 
     expect(buildQualifyingTelemetryRequests(10, [3, 4, 1], fastestLaps).map((request) => request.driverNumber)).toEqual([3, 1]);
+    expect(buildQualifyingTelemetryRequests(10, [1], fastestLaps)[0]).toMatchObject({
+      from: "2025-12-31T23:59:58.000Z",
+      to: "2026-01-01T00:01:32.000Z",
+    });
   });
 
   it("does not create telemetry requests without a completed session", () => {
     const fastestLaps = getFastestValidLaps([lap(1, 90)], [1]);
 
     expect(buildQualifyingTelemetryRequests(null, [1], fastestLaps)).toEqual([]);
+  });
+
+  it("never falls back to a full-session request when lap timing is malformed", () => {
+    const invalid = { ...lap(1, 90), date_start: "not-a-date" };
+    const fastestLaps = getFastestValidLaps([invalid], [1]);
+
+    expect(getQualifyingTelemetryBounds(invalid)).toBeNull();
+    expect(buildQualifyingTelemetryRequests(10, [1], fastestLaps)).toEqual([]);
   });
 });

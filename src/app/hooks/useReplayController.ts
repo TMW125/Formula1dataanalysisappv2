@@ -13,7 +13,7 @@ export function useReplayController(
   const [currentTime, setCurrentTime] = useState(start);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<ReplaySpeed>(1);
-  const lastTickRef = useRef(performance.now());
+  const lastTickRef = useRef(0);
   const currentTimeRef = useRef(start);
 
   useEffect(() => {

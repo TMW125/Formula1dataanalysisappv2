@@ -9,7 +9,10 @@
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
 
 export interface LeaderboardRow {
-  position: number;
+  /** Stable identity from OpenF1; never use a nullable classification as a row key. */
+  driverNumber: number;
+  position: number | null;
+  classificationStatus: "DNF" | "DNS" | "DSQ" | "NC" | null;
   /** Full name, e.g. "Max Verstappen" */
   driver: string;
   /** Formatted lap time string, e.g. "1:31.720" */

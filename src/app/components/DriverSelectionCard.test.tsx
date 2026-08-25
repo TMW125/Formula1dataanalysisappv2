@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
-import { render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OpenF1Driver } from "../types/openf1";
 import type { DriverSelectionState } from "../hooks/useDriverSelection";
 import { buildDriverVisualStyleMap } from "../utils/transformers";
@@ -49,6 +49,8 @@ function createSelection(): DriverSelectionState {
 }
 
 describe("DriverSelectionCard", () => {
+  afterEach(cleanup);
+
   it("uses solid and dashed swatches for the two teammates", () => {
     const { container } = render(<DriverSelectionCard selection={createSelection()} description="Choose drivers" />);
     const swatches = [...container.querySelectorAll("line[data-line-style]")];
@@ -58,5 +60,20 @@ describe("DriverSelectionCard", () => {
     expect(swatches[0]).not.toHaveAttribute("stroke-dasharray");
     expect(swatches[1]).toHaveAttribute("data-line-style", "dashed");
     expect(swatches[1]).toHaveAttribute("stroke-dasharray", "6 4");
+  });
+
+  it("uses one pressed option per driver without nested controls", () => {
+    const selection = createSelection();
+    render(<DriverSelectionCard selection={selection} description="Choose drivers" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /2 selected/ }));
+    const options = [...document.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")];
+
+    expect(options).toHaveLength(2);
+    expect(options.every((option) => option.getAttribute("aria-pressed") === "true")).toBe(true);
+    expect(document.querySelector("button button")).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    fireEvent.click(options[0]);
+    expect(selection.toggleDriver).toHaveBeenCalledWith(1);
   });
 });

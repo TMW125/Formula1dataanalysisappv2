@@ -137,7 +137,8 @@ export function getReplayEnd(dataset: ReplayDataset): number {
 }
 
 export function formatReplayGap(value: number | string | null, leader = false): string {
-  if (leader || value === null || value === 0) return "LEADER";
+  if (leader) return "LEADER";
+  if (value === null) return "—";
   if (typeof value === "string") return value.startsWith("+") ? value : `+${value}`;
   return `+${value.toFixed(3)}`;
 }
@@ -182,6 +183,7 @@ function interpolateLocation(
 
 export function buildReplayEvents(dataset: ReplayDataset): ReplayEvent[] {
   const events: ReplayEvent[] = [];
+  const sessionStart = Date.parse(dataset.session.date_start);
   dataset.raceControl.forEach((event, index) => {
     events.push({
       id: `control-${index}-${event.date}`,
@@ -234,7 +236,9 @@ export function buildReplayEvents(dataset: ReplayDataset): ReplayEvent[] {
       recordingUrl: radio.recording_url,
     });
   });
-  return events.sort((a, b) => a.timestamp - b.timestamp);
+  return events
+    .filter((event) => Number.isFinite(event.timestamp) && event.timestamp >= sessionStart)
+    .sort((a, b) => a.timestamp - b.timestamp);
 }
 
 /** Race-control events shown above the replay scrubber. */
@@ -243,6 +247,67 @@ export function isTimelineMarkerEvent(event: ReplayEvent): boolean {
   if (EXCLUDED_TIMELINE_TITLES.has(event.title.trim().toLowerCase())) return false;
   if (YELLOW_FLAG.test((event.flag ?? "").trim())) return false;
   return !PIT_ENTRY_MESSAGE.test(`${event.title} ${event.detail}`);
+}
+
+export interface ReplayEventCluster {
+  id: string;
+  events: ReplayEvent[];
+  pixel: number;
+}
+
+/**
+ * Collapse timeline markers until adjacent hit-target centres are at least one
+ * target width apart. Events inside a cluster remain individually seekable.
+ */
+export function clusterReplayEvents(
+  events: ReplayEvent[],
+  start: number,
+  end: number,
+  trackWidth: number,
+  markerSize = 28,
+): ReplayEventCluster[] {
+  if (events.length === 0 || trackWidth <= 0 || end <= start) return [];
+  const usableWidth = Math.max(0, trackWidth - markerSize);
+  const halfMarker = markerSize / 2;
+  const points = [...events]
+    .filter((event) => event.timestamp >= start && event.timestamp <= end)
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .map((event) => ({
+      event,
+      pixel: halfMarker + ((event.timestamp - start) / (end - start)) * usableWidth,
+    }));
+
+  let clusters = points.map(({ event, pixel }) => ({
+    id: event.id,
+    events: [event],
+    pixel,
+  }));
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const merged: ReplayEventCluster[] = [];
+    for (const cluster of clusters) {
+      const previous = merged.at(-1);
+      if (!previous || cluster.pixel - previous.pixel >= markerSize) {
+        merged.push(cluster);
+        continue;
+      }
+
+      const eventsInCluster = [...previous.events, ...cluster.events];
+      const total = previous.events.length + cluster.events.length;
+      previous.pixel = (
+        previous.pixel * previous.events.length
+        + cluster.pixel * cluster.events.length
+      ) / total;
+      previous.events = eventsInCluster;
+      previous.id = `${eventsInCluster[0].id}--${eventsInCluster.at(-1)!.id}`;
+      changed = true;
+    }
+    clusters = merged;
+  }
+
+  return clusters;
 }
 
 export function createReplayIndex(dataset: ReplayDataset): ReplayIndex {
@@ -314,10 +379,11 @@ export function buildReplayFrame(index: ReplayIndex, target: number): ReplayFram
       : best !== undefined && sessionBest !== null
         ? formatReplayGap(best - sessionBest, best === sessionBest)
         : "—";
+    const compoundLap = Math.max(1, currentLap);
     const stint = dataset.stints.find(
       (entry) => entry.driver_number === driver.driver_number
-        && currentLap >= entry.lap_start
-        && currentLap <= (entry.lap_end ?? Infinity)
+        && compoundLap >= entry.lap_start
+        && compoundLap <= (entry.lap_end ?? Infinity)
     );
     const activePit = [...dataset.pits].reverse().find((pit) => {
       if (pit.driver_number !== driver.driver_number) return false;
