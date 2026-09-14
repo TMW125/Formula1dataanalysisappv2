@@ -1,307 +1,246 @@
-/**
- * F1DataContext
- *
- * Global state for the currently selected season, meeting and session.
- * Also drives the cascading fetches:
- *
- *   Season selected  →  fetch meetings, reset meeting + session
- *   Meeting selected →  fetch sessions, reset session
- *
- * All other data (laps, car data, positions, …) must be fetched by individual
- * pages/components using `selectedSessionKey` from this context.
- */
-
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
-  useReducer,
-  type Dispatch,
+  useMemo,
+  useState,
   type ReactNode,
 } from "react";
-
+import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router";
 import { getMeetingsBySeason, getSessionsByMeeting } from "../services/openf1Api";
 import type { Meeting, Session } from "../types/openf1";
+import { QUERY_GC_TIME, QUERY_STALE_TIME } from "../queryClient";
+import { openF1QueryKeys } from "../queryKeys";
 
-// ─── State ────────────────────────────────────────────────────────────────────
+const FIRST_SUPPORTED_SEASON = 2023;
+
+export type SessionVariant = "main" | "sprint";
+export type SessionModeScope = "raceStrategy" | "liveReplay" | "qualifying";
+
+export interface SessionModeState {
+  raceStrategy: SessionVariant;
+  liveReplay: SessionVariant;
+  qualifying: SessionVariant;
+}
+
+const DEFAULT_SESSION_MODES: SessionModeState = {
+  raceStrategy: "main",
+  liveReplay: "main",
+  qualifying: "main",
+};
 
 export interface F1DataState {
-  // ─── Selections ──────────────────────────────────────────────────────────
   selectedSeason: string;
   selectedMeetingKey: number | null;
-  selectedSessionKey: number | null;
-
-  // ─── Meetings ─────────────────────────────────────────────────────────────
+  sessionModes: SessionModeState;
   meetings: Meeting[];
   meetingsLoading: boolean;
   meetingsError: string | null;
-
-  // ─── Sessions ─────────────────────────────────────────────────────────────
   sessions: Session[];
   sessionsLoading: boolean;
   sessionsError: string | null;
 }
 
-const currentYear = String(new Date().getFullYear());
-
-const initialState: F1DataState = {
-  selectedSeason: currentYear,
-  selectedMeetingKey: null,
-  selectedSessionKey: null,
-
-  meetings: [],
-  meetingsLoading: false,
-  meetingsError: null,
-
-  sessions: [],
-  sessionsLoading: false,
-  sessionsError: null,
-};
-
-// ─── Actions ──────────────────────────────────────────────────────────────────
-
-type Action =
-  | { type: "SET_SEASON"; payload: string }
-  | { type: "SET_MEETING_KEY"; payload: number | null }
-  | { type: "SET_SESSION_KEY"; payload: number | null }
-
-  | { type: "MEETINGS_LOADING" }
-  | { type: "MEETINGS_SUCCESS"; payload: Meeting[] }
-  | { type: "MEETINGS_ERROR"; payload: string }
-
-  | { type: "SESSIONS_LOADING" }
-  | { type: "SESSIONS_SUCCESS"; payload: Session[] }
-  | { type: "SESSIONS_ERROR"; payload: string };
-
-// ─── Reducer ──────────────────────────────────────────────────────────────────
-
-function reducer(state: F1DataState, action: Action): F1DataState {
-  switch (action.type) {
-    // ── Selections ────────────────────────────────────────────────────────
-    case "SET_SEASON":
-      return {
-        ...state,
-        selectedSeason: action.payload,
-        // Reset downstream selections and data
-        selectedMeetingKey: null,
-        selectedSessionKey: null,
-        meetings: [],
-        sessions: [],
-        meetingsError: null,
-        sessionsError: null,
-      };
-
-    case "SET_MEETING_KEY":
-      return {
-        ...state,
-        selectedMeetingKey: action.payload,
-        // Reset downstream selections and data
-        selectedSessionKey: null,
-        sessions: [],
-        sessionsError: null,
-      };
-
-    case "SET_SESSION_KEY":
-      return { ...state, selectedSessionKey: action.payload };
-
-    // ── Meetings ──────────────────────────────────────────────────────────
-    case "MEETINGS_LOADING":
-      return { ...state, meetingsLoading: true, meetingsError: null };
-
-    case "MEETINGS_SUCCESS":
-      return { ...state, meetingsLoading: false, meetings: action.payload };
-
-    case "MEETINGS_ERROR":
-      return { ...state, meetingsLoading: false, meetingsError: action.payload };
-
-    // ── Sessions ──────────────────────────────────────────────────────────
-    case "SESSIONS_LOADING":
-      return { ...state, sessionsLoading: true, sessionsError: null };
-
-    case "SESSIONS_SUCCESS":
-      return { ...state, sessionsLoading: false, sessions: action.payload };
-
-    case "SESSIONS_ERROR":
-      return { ...state, sessionsLoading: false, sessionsError: action.payload };
-
-    default:
-      return state;
-  }
-}
-
-// ─── Context ──────────────────────────────────────────────────────────────────
-
 interface F1DataContextValue {
   state: F1DataState;
-  dispatch: Dispatch<Action>;
-
-  // Convenience setters (wrap dispatch so consumers don't need to know about
-  // action shapes)
   setSeason: (season: string) => void;
   setMeetingKey: (meetingKey: number | null) => void;
-  setSessionKey: (sessionKey: number | null) => void;
+  setSessionMode: (scope: SessionModeScope, variant: SessionVariant) => void;
+  refetchMeetings: () => void;
+  refetchSessions: () => void;
 }
 
 const F1DataContext = createContext<F1DataContextValue | null>(null);
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
-interface F1DataProviderProps {
-  children: ReactNode;
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : error ? "Unknown error" : null;
 }
 
-export function F1DataProvider({ children }: F1DataProviderProps) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+function parseSeason(value: string | null) {
+  const currentYear = new Date().getFullYear();
+  const year = Number(value);
+  return Number.isInteger(year) && year >= FIRST_SUPPORTED_SEASON && year <= currentYear
+    ? year
+    : currentYear;
+}
 
-  // ── Convenience setters ────────────────────────────────────────────────────
+interface ModeSelection {
+  selectionKey: string;
+  modes: SessionModeState;
+}
+
+export function F1DataProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedSeason, setSelectedSeason] = useState(() => String(new Date().getFullYear()));
+  const [requestedMeetingKey, setRequestedMeetingKey] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!searchParams.has("season") && !searchParams.has("meeting")) return;
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("season");
+      next.delete("meeting");
+      return next;
+    }, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const meetingsQuery = useQuery({
+    queryKey: openF1QueryKeys.meetingsBySeason(selectedSeason),
+    queryFn: () => getMeetingsBySeason(selectedSeason),
+    enabled,
+    staleTime: QUERY_STALE_TIME.historical,
+    gcTime: QUERY_GC_TIME.standard,
+  });
+
+  const meetings = useMemo(() => {
+    const now = Date.now();
+    return [...(meetingsQuery.data ?? [])]
+      .filter((meeting) => {
+        const start = Date.parse(meeting.date_start);
+        return Number.isFinite(start) && start <= now;
+      })
+      .sort((a, b) => Date.parse(a.date_start) - Date.parse(b.date_start));
+  }, [meetingsQuery.data]);
+
+  const selectedMeetingKey = meetings.some((meeting) => meeting.meeting_key === requestedMeetingKey)
+    ? requestedMeetingKey
+    : null;
+
+  useEffect(() => {
+    if (!enabled || !meetingsQuery.isSuccess) return;
+
+    if (meetings.length > 0) {
+      if (selectedMeetingKey === null) setRequestedMeetingKey(meetings.at(-1)!.meeting_key);
+      return;
+    }
+
+    if (Number(selectedSeason) > FIRST_SUPPORTED_SEASON) {
+      setSelectedSeason(String(Number(selectedSeason) - 1));
+      setRequestedMeetingKey(null);
+    } else if (requestedMeetingKey !== null) {
+      setRequestedMeetingKey(null);
+    }
+  }, [
+    meetings,
+    enabled,
+    meetingsQuery.isSuccess,
+    requestedMeetingKey,
+    selectedMeetingKey,
+    selectedSeason,
+  ]);
+
+  const sessionsQuery = useQuery({
+    queryKey: openF1QueryKeys.sessionsByMeeting(selectedSeason, selectedMeetingKey ?? 0),
+    queryFn: () => getSessionsByMeeting(selectedMeetingKey!),
+    enabled: enabled && selectedMeetingKey !== null,
+    staleTime: QUERY_STALE_TIME.historical,
+    gcTime: QUERY_GC_TIME.standard,
+  });
+
+  const sessions = useMemo(
+    () => [...(sessionsQuery.data ?? [])].sort((a, b) => Date.parse(a.date_start) - Date.parse(b.date_start)),
+    [sessionsQuery.data],
+  );
+
+  const selectionKey = `${selectedSeason}:${selectedMeetingKey ?? "none"}`;
+  const [modeSelection, setModeSelection] = useState<ModeSelection>({
+    selectionKey,
+    modes: DEFAULT_SESSION_MODES,
+  });
+  const sessionModes = modeSelection.selectionKey === selectionKey
+    ? modeSelection.modes
+    : DEFAULT_SESSION_MODES;
 
   const setSeason = useCallback((season: string) => {
-    dispatch({ type: "SET_SEASON", payload: season });
+    setSelectedSeason(String(parseSeason(season)));
+    setRequestedMeetingKey(null);
   }, []);
 
   const setMeetingKey = useCallback((meetingKey: number | null) => {
-    dispatch({ type: "SET_MEETING_KEY", payload: meetingKey });
+    setRequestedMeetingKey(meetingKey);
   }, []);
 
-  const setSessionKey = useCallback((sessionKey: number | null) => {
-    dispatch({ type: "SET_SESSION_KEY", payload: sessionKey });
-  }, []);
+  const setSessionMode = useCallback((scope: SessionModeScope, variant: SessionVariant) => {
+    setModeSelection((current) => ({
+      selectionKey,
+      modes: {
+        ...(current.selectionKey === selectionKey ? current.modes : DEFAULT_SESSION_MODES),
+        [scope]: variant,
+      },
+    }));
+  }, [selectionKey]);
 
-  // ── Effect: fetch meetings whenever the season changes ─────────────────────
+  const state = useMemo<F1DataState>(() => ({
+    selectedSeason,
+    selectedMeetingKey,
+    sessionModes,
+    meetings,
+    meetingsLoading: enabled && meetingsQuery.isPending,
+    meetingsError: enabled ? errorMessage(meetingsQuery.error) : null,
+    sessions,
+    sessionsLoading: enabled && selectedMeetingKey !== null && sessionsQuery.isPending,
+    sessionsError: enabled && selectedMeetingKey !== null ? errorMessage(sessionsQuery.error) : null,
+  }), [
+    meetings,
+    enabled,
+    meetingsQuery.error,
+    meetingsQuery.isPending,
+    selectedMeetingKey,
+    selectedSeason,
+    sessionModes,
+    sessions,
+    sessionsQuery.error,
+    sessionsQuery.isPending,
+  ]);
 
-  useEffect(() => {
-    if (!state.selectedSeason) return;
+  const value = useMemo<F1DataContextValue>(() => ({
+    state,
+    setSeason,
+    setMeetingKey,
+    setSessionMode,
+    refetchMeetings: () => { void meetingsQuery.refetch(); },
+    refetchSessions: () => { void sessionsQuery.refetch(); },
+  }), [meetingsQuery, sessionsQuery, setMeetingKey, setSeason, setSessionMode, state]);
 
-    let cancelled = false;
-
-    async function fetchMeetings() {
-      dispatch({ type: "MEETINGS_LOADING" });
-      try {
-        const meetings = await getMeetingsBySeason(state.selectedSeason);
-        if (!cancelled) {
-          // Filter to meetings that have already started, then sort chronologically
-          const now = new Date();
-          const past = meetings.filter((m) => new Date(m.date_start) <= now);
-          const sorted = [...past].sort(
-            (a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime()
-          );
-          dispatch({ type: "MEETINGS_SUCCESS", payload: sorted });
-          // Default to the latest (last) meeting
-          const latest = sorted[sorted.length - 1];
-          dispatch({ type: "SET_MEETING_KEY", payload: latest?.meeting_key ?? null });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : "Failed to fetch meetings";
-          dispatch({ type: "MEETINGS_ERROR", payload: message });
-        }
-      }
-    }
-
-    void fetchMeetings();
-    return () => {
-      cancelled = true;
-    };
-  }, [state.selectedSeason]);
-
-  // ── Effect: fetch sessions whenever the selected meeting changes ───────────
-
-  useEffect(() => {
-    if (state.selectedMeetingKey === null) return;
-
-    let cancelled = false;
-
-    async function fetchSessions() {
-      dispatch({ type: "SESSIONS_LOADING" });
-      try {
-        const sessions = await getSessionsByMeeting(state.selectedMeetingKey!);
-        if (!cancelled) {
-          // Sort chronologically so session options appear in weekend order
-          const sorted = [...sessions].sort(
-            (a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime()
-          );
-          dispatch({ type: "SESSIONS_SUCCESS", payload: sorted });
-          // Default to the latest session that has already started; fall back to
-          // the first session if none have started yet
-          const now = new Date();
-          const past = sorted.filter((s) => new Date(s.date_start) <= now);
-          const latest = past.length > 0 ? past[past.length - 1] : sorted[0];
-          dispatch({ type: "SET_SESSION_KEY", payload: latest?.session_key ?? null });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : "Failed to fetch sessions";
-          dispatch({ type: "SESSIONS_ERROR", payload: message });
-        }
-      }
-    }
-
-    void fetchSessions();
-    return () => {
-      cancelled = true;
-    };
-  }, [state.selectedMeetingKey]);
-
-  return (
-    <F1DataContext.Provider value={{ state, dispatch, setSeason, setMeetingKey, setSessionKey }}>
-      {children}
-    </F1DataContext.Provider>
-  );
+  return <F1DataContext.Provider value={value}>{children}</F1DataContext.Provider>;
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-
-/**
- * Access the global F1 data context.
- *
- * @throws If used outside of `<F1DataProvider>`.
- *
- * @example
- * const { state, setSeason, setMeetingKey, setSessionKey } = useF1Data();
- */
 export function useF1Data(): F1DataContextValue {
-  const ctx = useContext(F1DataContext);
-  if (!ctx) {
-    throw new Error("useF1Data must be used within a <F1DataProvider>");
-  }
-  return ctx;
+  const context = useContext(F1DataContext);
+  if (!context) throw new Error("useF1Data must be used within a <F1DataProvider>");
+  return context;
 }
 
-// ─── Selector Hooks ───────────────────────────────────────────────────────────
-// Fine-grained hooks that avoid unnecessary re-renders in consuming components.
-
-/** Returns the currently selected season year as a string, e.g. "2024". */
 export function useSelectedSeason() {
   return useF1Data().state.selectedSeason;
 }
 
-/** Returns the currently selected meeting_key (or null). */
 export function useSelectedMeetingKey() {
   return useF1Data().state.selectedMeetingKey;
 }
 
-/** Returns the currently selected session_key (or null). */
-export function useSelectedSessionKey() {
-  return useF1Data().state.selectedSessionKey;
+export function useSessionMode(scope: SessionModeScope): SessionVariant {
+  return useF1Data().state.sessionModes[scope];
 }
 
-/** Returns the full list of meetings for the current season. */
 export function useMeetings() {
-  const { state } = useF1Data();
+  const { state, refetchMeetings } = useF1Data();
   return {
     meetings: state.meetings,
     loading: state.meetingsLoading,
     error: state.meetingsError,
+    refetch: refetchMeetings,
   };
 }
 
-/** Returns the full list of sessions for the current meeting. */
 export function useSessions() {
-  const { state } = useF1Data();
+  const { state, refetchSessions } = useF1Data();
   return {
     sessions: state.sessions,
     loading: state.sessionsLoading,
     error: state.sessionsError,
+    refetch: refetchSessions,
   };
 }

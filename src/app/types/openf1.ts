@@ -117,8 +117,8 @@ export interface Interval {
   meeting_key: number;
   driver_number: number;
   date: string;
-  interval: number | null;      // gap to car ahead (seconds)
-  gap_to_leader: number | null; // gap to race leader (seconds)
+  interval: number | string | null;      // seconds, "+1 LAP", or null
+  gap_to_leader: number | string | null; // seconds, "+1 LAP", or null
 }
 
 // ─── Stints ──────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ export interface Stint {
   driver_number: number;
   stint_number: number;
   lap_start: number;
-  lap_end: number;
+  lap_end: number | null;
   // OpenF1 can return null when a stint's compound is not available.
   compound: "SOFT" | "MEDIUM" | "HARD" | "INTERMEDIATE" | "WET" | "UNKNOWN" | null;
   tyre_age_at_start: number;
@@ -170,9 +170,9 @@ export interface SessionResult {
   session_key: number;
   meeting_key: number;
   driver_number: number;
-  position: number;
-  duration: number | null;      // best lap time in seconds
-  gap_to_leader: number | null; // gap to leader in seconds
+  position: number | null;
+  duration: number | Array<number | null> | null;
+  gap_to_leader: number | string | Array<number | string | null> | null;
   number_of_laps: number;
   dnf: boolean;
   dns: boolean;
@@ -222,30 +222,6 @@ export interface StartingGrid {
   lap_duration: number | null;
 }
 
-// ─── Championship Drivers (beta) ──────────────────────────────────────────────
-
-export interface ChampionshipDriver {
-  session_key: number;
-  meeting_key: number;
-  driver_number: number;
-  points_current: number;
-  points_start: number;
-  position_current: number;
-  position_start: number;
-}
-
-// ─── Championship Teams (beta) ────────────────────────────────────────────────
-
-export interface ChampionshipTeam {
-  session_key: number;
-  meeting_key: number;
-  team_name: string;
-  points_current: number;
-  points_start: number;
-  position_current: number;
-  position_start: number;
-}
-
 // ─── Race Control ────────────────────────────────────────────────────────────
 
 export interface RaceControlEvent {
@@ -265,14 +241,10 @@ export interface RaceControlEvent {
 
 export interface MeetingsParams {
   year?: number | string;
-  meeting_key?: number;
 }
 
 export interface SessionsParams {
   meeting_key?: number;
-  session_key?: number;
-  year?: number | string;
-  session_name?: string;
 }
 
 export interface DriversParams {
@@ -286,9 +258,11 @@ export interface LapsParams {
   lap_number?: number;
 }
 
-export interface CarDataParams {
+export interface CarDataRangeParams {
   session_key: number;
-  driver_number?: number;
+  driver_number: number;
+  "date>=": string;
+  "date<": string;
 }
 
 export interface PositionsParams {
@@ -323,9 +297,10 @@ export interface SessionResultParams {
   session_key: number;
 }
 
-export interface LocationParams {
+export interface LocationRangeParams {
   session_key: number;
-  driver_number?: number;
+  "date>=": string;
+  "date<": string;
 }
 
 export interface TeamRadioParams {
@@ -341,14 +316,4 @@ export interface OvertakesParams {
 
 export interface StartingGridParams {
   session_key: number;
-}
-
-export interface ChampionshipDriversParams {
-  session_key: number;
-  driver_number?: number;
-}
-
-export interface ChampionshipTeamsParams {
-  session_key: number;
-  team_name?: string;
 }

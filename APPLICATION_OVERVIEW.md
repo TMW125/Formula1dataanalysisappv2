@@ -1,219 +1,40 @@
-# F1 Analytics Platform - Application Overview
+# Application overview
 
-## 🏎️ Introduction
-A professional Formula 1 data analysis web application built with React, TypeScript, and Tailwind CSS. Features a dark motorsport theme inspired by F1 broadcast graphics with comprehensive telemetry visualization and race strategy analysis.
+## Architecture
 
-## 📁 Project Structure
+The application is a client-rendered React 18 and TypeScript SPA. React Router owns page routing, TanStack Query owns remote-data state, and OpenF1 requests pass through one rate-limited API service.
 
-```
-/src/app/
-├── App.tsx                     # Main application entry with React Router
-├── routes.tsx                  # Route configuration
-├── layouts/
-│   └── MainLayout.tsx         # Main layout with sidebar and top bar
-├── pages/
-│   ├── Dashboard.tsx          # Race weekend overview
-│   ├── DriverAnalysis.tsx     # Detailed driver telemetry
-│   ├── DriverComparison.tsx   # Side-by-side driver comparison
-│   ├── RaceStrategy.tsx       # Race pace and tire strategy
-│   └── DataExplorer.tsx       # Raw data access and export
-├── components/
-│   ├── charts/
-│   │   ├── TelemetryChart.tsx # Reusable telemetry visualization
-│   │   └── LapTimeChart.tsx   # Lap time comparison chart
-│   ├── DriverCard.tsx         # Driver information card
-│   ├── LeaderboardTable.tsx   # Race position table
-│   ├── SessionInfoPanel.tsx   # Session information display
-│   ├── StatsCard.tsx          # Statistics card component
-│   ├── TrackMap.tsx           # SVG track visualization
-│   ├── LoadingSpinner.tsx     # Loading state component
-│   └── index.ts               # Component exports
-└── data/
-    └── mockData.ts            # Mock F1 data for demonstration
+- `src/app/layouts/ApplicationShell.tsx` applies the 1024px support boundary before mounting the OpenF1 selection provider.
+- `src/app/context/F1DataContext.tsx` owns in-memory season and meeting selection without adding it to the URL.
+- `src/app/hooks/useSessionScope.ts` resolves page-specific Race, Sprint, and Qualifying sessions without leaking page toggles into global selection.
+- `src/app/hooks/useSessionData.ts` supplies consistent query contracts for ordinary endpoints.
+- `src/app/hooks/useReplayData.ts` incrementally loads replay sources and reports required and optional failures separately.
+- `src/app/services/openf1Api.ts` builds requests, enforces the in-tab request budget, and supports abort signals.
+- Route pages are lazy-loaded from `src/app/routes.tsx`.
 
-/src/styles/
-├── theme.css                  # F1 dark theme with custom colors
-└── fonts.css                  # Rajdhani and Inter font imports
-```
+## Route behavior
 
-## 🎨 Design System
+| Route | Version-1 behavior |
+| --- | --- |
+| `/` | Latest completed-session dashboard and classification |
+| `/qualifying` | Qualifying/Sprint Qualifying fastest-lap comparison |
+| `/race` | Race/Sprint strategy and lap analysis |
+| `/live-replay` | Completed Race/Sprint replay |
+| `/practice` | Static, non-fetching “Coming soon” placeholder |
+| Any other path | Not-found page |
 
-### Color Palette
-- **Primary (F1 Red)**: `#E10600`
-- **Background**: `#0a0a0f` with carbon fiber texture
-- **Cards**: `#15151c`
-- **Borders**: `#2a2a36`
+Season, meeting, Race/Sprint, and Qualifying/Sprint Qualifying selections are intentionally ephemeral in version 1.
 
-### Typography
-- **Headings**: Rajdhani (bold, condensed motorsport font)
-- **Body**: Inter (clean, readable)
+## Data and state conventions
 
-### Team Colors
-- Red Bull Racing: `#3671C6`
-- Mercedes: `#27F4D2`
-- Ferrari: `#E8002D`
-- McLaren: `#FF8000`
-- Aston Martin: `#229971`
+- Required endpoint failures block the affected page and provide Retry.
+- Optional source failures retain usable panels and identify missing content.
+- Loading, empty, unavailable, partial, and error states have distinct copy and semantics.
+- Final classification positions are nullable; driver number is the stable row identity and DNF/DNS/DSQ/NC statuses remain visible.
+- Qualifying car data is requested only for each selected fastest-lap time window. Unlimited driver selection is retained.
+- Replay locations are chunked through the computed data-derived replay end, including late-running sessions.
+- Query cache retention remains deliberately conservative pending post-release memory profiling.
 
-## 📊 Features by Page
+## Known boundaries
 
-### 1. Dashboard (`/`)
-- **Overview**: High-level race weekend summary
-- **Components**:
-  - 4 stats cards (drivers, session time, top speed, best lap)
-  - Interactive track map with driver positions
-  - Session information panel
-  - Top 10 lap time chart
-  - Full driver leaderboard
-
-### 2. Driver Analysis (`/driver-analysis`)
-- **Purpose**: In-depth single driver telemetry analysis
-- **Features**:
-  - Driver and lap selectors
-  - Driver information card with team colors
-  - Sector times breakdown (3 sectors)
-  - 5 telemetry charts:
-    - Speed vs Distance
-    - Throttle Application
-    - Brake Application
-    - Gear Selection
-    - Engine RPM
-  - Tire compound and stint history
-
-### 3. Driver Comparison (`/driver-comparison`)
-- **Purpose**: Compare two drivers side-by-side
-- **Features**:
-  - Dual driver selection
-  - Driver comparison cards
-  - Delta time graph
-  - Overlaid speed comparison
-  - Overlaid throttle comparison
-  - Corner-by-corner analysis (8 corners)
-
-### 4. Race Strategy (`/race-strategy`)
-- **Purpose**: Analyze race pace and pit strategy
-- **Features**:
-  - Key metrics cards (laps, avg pit stop, fastest lap)
-  - Visual stint timeline for multiple drivers
-  - Lap times scatter plot across race
-  - Average pace by stint bar chart
-  - Pit stop summary table
-
-### 5. Data Explorer (`/data-explorer`)
-- **Purpose**: Raw API data access for advanced users
-- **Features**:
-  - API endpoint selector (6 endpoints)
-  - Multi-filter controls (driver, session, lap)
-  - Table/JSON view toggle
-  - CSV export functionality
-  - OpenF1 API documentation panel
-
-## 🎯 Key Components
-
-### Chart Components
-- **TelemetryChart**: Flexible multi-line chart for telemetry data
-- **LapTimeChart**: Specialized lap time comparison visualization
-
-### UI Components
-- **DriverCard**: Displays driver info with team branding
-- **LeaderboardTable**: Position-based table with highlighting
-- **SessionInfoPanel**: Icon-based session information
-- **TrackMap**: SVG track visualization with live positions
-- **StatsCard**: Reusable metric display with trends
-
-## 🔌 Data Integration
-
-### Mock Data Structure
-The application uses comprehensive mock data including:
-- 10 drivers with team information
-- Lap times and leaderboard positions
-- 100-point telemetry datasets
-- Sector timing data
-- Tire stint information
-- Session metadata
-
-### OpenF1 API Ready
-Designed to integrate with OpenF1 API endpoints:
-- `/sessions` - Session data
-- `/drivers` - Driver information
-- `/laps` - Lap timing
-- `/telemetry` - Car telemetry
-- `/car_data` - Sensor data
-- `/positions` - Track positions
-
-## 🚀 Navigation
-
-### Sidebar Navigation
-- Dashboard
-- Driver Analysis
-- Driver Comparison
-- Race Strategy
-- Data Explorer
-
-### Top Bar Controls
-- Session selector (Practice 1-3, Qualifying, Race)
-- Race weekend selector (5 Grand Prix)
-- Driver search functionality
-
-## 📱 Responsive Design
-
-- **Desktop**: Full multi-column layouts
-- **Tablet**: 2-3 column grids
-- **Mobile**: Single column stacked layout
-
-## 🎨 Visual Design
-
-### Motorsport Aesthetic
-- Carbon fiber-inspired background texture
-- F1 broadcast graphics influence
-- Team color-coded elements
-- Monospace fonts for timing data
-- Premium dark theme
-
-### Interactive Elements
-- Hover states on all clickable items
-- Smooth transitions (200-300ms)
-- Focus rings with F1 red
-- Active navigation indicators
-- Responsive chart tooltips
-
-## 🔧 Technical Stack
-
-- **Framework**: React 18.3 with TypeScript
-- **Routing**: React Router v7 (Data mode)
-- **Styling**: Tailwind CSS v4
-- **Charts**: Recharts
-- **Icons**: Lucide React
-- **Fonts**: Google Fonts (Rajdhani, Inter)
-
-## 📈 Performance Features
-
-- Lazy loading ready
-- Optimized SVG rendering
-- Efficient data filtering
-- Memoization opportunities
-- Component-based architecture
-
-## 🎓 Learning Resources
-
-See `/DESIGN_SYSTEM.md` for comprehensive design system documentation including:
-- Complete color palette
-- Typography guidelines
-- Component API documentation
-- Layout patterns
-- Accessibility standards
-- Future enhancement roadmap
-
-## 🎉 Ready to Use
-
-The application is fully functional with:
-- ✅ Complete navigation system
-- ✅ All 5 pages implemented
-- ✅ Reusable component library
-- ✅ Professional F1 design theme
-- ✅ Mock data for demonstration
-- ✅ Responsive layouts
-- ✅ Export functionality
-- ✅ Interactive data visualizations
-
-Start exploring Formula 1 data with a professional-grade analytics platform!
+The app is historical analysis software, not an official timing product. OpenF1 may omit or revise records. Pit-lane durations are presented as reported and may include red-flag or pit-lane holds. Formal mobile support, actual Practice analysis, full non-visual chart parity, and cross-tab rate-limit coordination are outside version 1.
